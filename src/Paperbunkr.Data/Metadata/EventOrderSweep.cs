@@ -247,7 +247,7 @@ public static class EventOrderSweep
     internal static List<EventInfo> LoadEvents(PaperbunkrDbContext context)
     {
         // Flat queries joined in memory: one projection with nested collections and a Min needs SQL APPLY, which SQLite has not got.
-        var events = context.StoryEvents.AsNoTracking().Select(e => new { e.Id, e.Name, e.StartDate }).ToList();
+        var events = context.StoryEvents.AsNoTracking().ToList();
         var aliases = context.StoryEventAliases.AsNoTracking().Select(a => new { a.StoryEventId, a.Key }).ToList()
             .GroupBy(a => a.StoryEventId).ToDictionary(g => g.Key, g => g.Select(a => a.Key).ToList());
         var members = context.EventMemberships.AsNoTracking()
@@ -261,7 +261,7 @@ public static class EventOrderSweep
             var (series, year) = members.GetValueOrDefault(e.Id, (new List<string>(), (int?)null));
             return new EventInfo(
                 e.Id, e.Name, EventNameKeys.For(e.Name, series, aliases.GetValueOrDefault(e.Id)),
-                e.StartDate?.Year ?? year);
+                EventEnrichment.EventPublicationDate.Effective(e, false)?.Year ?? year);
         }).ToList();
     }
 }

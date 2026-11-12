@@ -62,7 +62,12 @@ public sealed class ShareClientTests : IAsyncLifetime
     {
         await _server.StopAsync();
 
-        await Assert.ThrowsAsync<HostUnreachableException>(() => ShareClient.ProbeAsync("127.0.0.1", _server.Port, TimeSpan.FromSeconds(2)));
+        // 10 s like the app: Windows retries a refused connect for about 2 s before reporting it, so a shorter timeout reads as "no answer".
+        var ex = await Assert.ThrowsAsync<HostUnreachableException>(() => ShareClient.ProbeAsync("127.0.0.1", _server.Port, TimeSpan.FromSeconds(10)));
+
+        // The message says why (nothing listening), not just "could not reach".
+        Assert.Contains("refused the connection", ex.Message);
+        Assert.Contains($"127.0.0.1:{_server.Port}", ex.Message);
     }
 
     [Fact]

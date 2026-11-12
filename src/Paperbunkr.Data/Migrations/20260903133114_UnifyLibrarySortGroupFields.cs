@@ -54,9 +54,34 @@ namespace Paperbunkr.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Data-only Up (the columns were never dropped) - nothing structural to reverse. The
-            // carry-over is not undone; the series selection simply lives on in
-            // LibraryIssueListSortField, which is harmless there.
+            // Data-only Up (the columns were never dropped). The carry-over is not undone; the series
+            // selection simply lives on in LibraryIssueListSortField, which is harmless there.
+            //
+            // But the 3 orphan columns may be gone by the time a rollback gets here: every later Down
+            // that rebuilds AppSettings (any DropColumn on it) recreates the table from a snapshot that
+            // no longer lists them. The next Down below this one rebuilds AppSettings from a snapshot
+            // that does list them, and would then fail copying them ('no such column: "LibraryGroupField"').
+            // So recreate them here, whatever state they are in. A DropColumn followed by an AddColumn
+            // of the same name is folded by EF's SQLite generator into one AppSettings rebuild, and the
+            // re-added column is created fresh (with its original default) rather than copied. That works
+            // whether or not the orphan survived. A surviving orphan's value is reset to its default;
+            // SQLite has no conditional DDL that could keep it only when present.
+            foreach (var (name, defaultValue) in new[]
+                     {
+                         ("LibraryGroupField", "None"),
+                         ("LibrarySortDirection", "Descending"),
+                         ("LibrarySortField", "DateAdded"),
+                     })
+            {
+                migrationBuilder.DropColumn(name: name, table: "AppSettings");
+                migrationBuilder.AddColumn<string>(
+                    name: name,
+                    table: "AppSettings",
+                    type: "TEXT",
+                    maxLength: 32,
+                    nullable: false,
+                    defaultValue: defaultValue);
+            }
         }
     }
 }

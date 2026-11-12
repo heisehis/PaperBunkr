@@ -35,7 +35,7 @@
         </StackPanel>
 
         <!-- Hero + switch -->
-        <Panel Grid.Row="0" IsVisible="{Binding HasPage}">
+        <Panel Grid.Row="0" IsVisible="{Binding ShowFullHero}">
             <views:ContinuityHero DataContext="{Binding ContinuityPage}" IsVisible="{Binding #Screen.((vm:ContinuityScreenViewModel)DataContext).IsContinuitySelected}" />
             <views:EventHero DataContext="{Binding EventPage}" IsVisible="{Binding #Screen.((vm:ContinuityScreenViewModel)DataContext).IsEventSelected}" />
             <Border Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
@@ -50,6 +50,7 @@
                 </StackPanel>
             </Border>
         </Panel>
+        <views:MapHeaderStrip Grid.Row="0" IsVisible="{Binding ShowEventMap}" />
 
         <!-- Body: Overview -->
         <ScrollViewer Grid.Row="1" x:Name="OverviewScroller" IsVisible="{Binding ShowOverview}" controls:Replace.On="{Binding ShowOverview}" HorizontalScrollBarVisibility="Disabled">
@@ -78,5 +79,6 @@
 
         <!-- Compare & merge -->
         <views:ContinuityCompareOverlay Grid.RowSpan="2" DataContext="{Binding ContinuityPage}" />
+        <views:EventSmartFillOverlay Grid.RowSpan="2" DataContext="{Binding SmartFill}" />
     </Grid>
 </UserControl>

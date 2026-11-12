@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:views="using:Paperbunkr.App.Views"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -9,8 +10,13 @@
              x:Class="Paperbunkr.App.Views.NewEventOrContinuityOverlay"
              x:DataType="vm:NewEventOrContinuityViewModel">
 
+    <Grid>
     <controls:DialogCard Title="{Binding Title}" Size="Medium">
         <StackPanel Spacing="12">
+            <WrapPanel IsVisible="{Binding CanFillEvent}">
+                <Button Classes="secondary" Content="Smart fill" Command="{Binding SmartFillDraftCommand}" Margin="0,0,8,0" />
+                <Button Classes="ghost" Content="Compare sources…" Command="{Binding CompareDraftSourcesCommand}" />
+            </WrapPanel>
             <StackPanel IsVisible="{Binding IsBasics}" Spacing="12">
             <StackPanel Spacing="6" IsVisible="{Binding !IsEdit}">
                 <TextBlock Text="WORKFLOW" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
@@ -36,15 +42,15 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                    <StackPanel Spacing="5"><TextBlock Text="START DATE (YYYY-MM-DD)" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"/><TextBox Text="{Binding StartDate}" PlaceholderText="optional" AutomationProperties.Name="Event start date"/></StackPanel>
-                    <StackPanel Grid.Column="1" Spacing="5"><TextBlock Text="END DATE (YYYY-MM-DD)" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"/><TextBox Text="{Binding EndDate}" PlaceholderText="optional" AutomationProperties.Name="Event end date"/></StackPanel>
+                    <StackPanel Spacing="8"><TextBlock Classes="fieldLabel" Text="START DATE"/><TextBox Text="{Binding StartDate}" PlaceholderText="YYYY, YYYY-MM or YYYY-MM-DD" AutomationProperties.Name="Event start date"/><CheckBox IsChecked="{Binding StartDateUncertain}"><TextBlock Classes="pbTextBody" Text="Uncertain" /></CheckBox></StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="8"><TextBlock Classes="fieldLabel" Text="END DATE"/><TextBox Text="{Binding EndDate}" PlaceholderText="YYYY, YYYY-MM or YYYY-MM-DD" AutomationProperties.Name="Event end date"/><CheckBox IsChecked="{Binding EndDateUncertain}"><TextBlock Classes="pbTextBody" Text="Uncertain" /></CheckBox><CheckBox IsChecked="{Binding EndDateProvisional}"><TextBlock Classes="pbTextBody" Text="Through this date (provisional)" TextWrapping="Wrap" /></CheckBox></StackPanel>
                 </Grid>
                 <TextBlock Text="{Binding DateEntryError}" Foreground="{DynamicResource PbDangerBrush}" IsVisible="{Binding DateEntryError, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
                 <StackPanel Spacing="5"><TextBlock Text="EVENT TAGS" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"/><TextBox Text="{Binding EventTags}" PlaceholderText="one tag per line" AcceptsReturn="True" MinHeight="48" MaxHeight="90" AutomationProperties.Name="Curated event tags"/></StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Classes="ghost" Content="Choose event cover" Command="{Binding ChooseEventCoverCommand}" AutomationProperties.Name="Choose event cover"/>
                     <TextBlock Text="Cover selected" IsVisible="{Binding EventCoverPath, Converter={x:Static conv:ObjectConverters.IsNotNull}}" VerticalAlignment="Center" Classes="csFaint"/>
-                    <Button Classes="ghost" Content="Clear" Command="{Binding ClearEventCoverCommand}" IsVisible="{Binding EventCoverPath, Converter={x:Static conv:ObjectConverters.IsNotNull}}"/>
+                    <Button Classes="ghost" Content="Clear cover" Command="{Binding ClearEventCoverCommand}"/>
                 </StackPanel>
             </StackPanel>
             <StackPanel Spacing="6" IsVisible="{Binding IsContinuity}">
@@ -186,4 +192,6 @@
             </StackPanel>
         </controls:DialogCard.Footer>
     </controls:DialogCard>
+    <views:EventSmartFillOverlay DataContext="{Binding DraftSources}" />
+    </Grid>
 </UserControl>

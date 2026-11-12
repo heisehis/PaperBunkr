@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata.EventEnrichment;
 using Paperbunkr.Data.ReadingLists.Sources;
 
 namespace Paperbunkr.App.Services;
@@ -19,51 +20,18 @@ public static class StoryEventDetailsCompletion
     /// <summary>Explicit event-page refresh. Bypasses the automatic 30-day throttle while preserving user-entered details.</summary>
     public static async Task<RefreshResult> RefreshEventAsync(PaperbunkrDbContext context, int eventId, CancellationToken cancellationToken)
     {
-        var storyEvent = await context.StoryEvents.FirstOrDefaultAsync(e => e.Id == eventId, cancellationToken).ConfigureAwait(false);
-        if (storyEvent is null) return new RefreshResult(false, false, false, null);
-
-        var candidates = storyEvent.IdentityConflict is not null
-            ? new[] { ("Metron", storyEvent.MetronArcId) }
-            : new[] { ("Metron", storyEvent.MetronArcId), ("ComicVine", storyEvent.ComicVineArcId) };
-        bool hasIdentity = candidates.Any(c => !string.IsNullOrWhiteSpace(c.Item2));
-        if (!hasIdentity) return new RefreshResult(false, false, false, null);
-
-        bool attempted = false;
-        bool detailsChanged = false;
-        string? providerUsed = null;
-        foreach (var (sourceKey, arcId) in candidates)
+        var row = await context.StoryEvents.AsNoTracking().SingleOrDefaultAsync(e => e.Id == eventId, cancellationToken).ConfigureAwait(false);
+        if (row is null) return new(false, false, false, null);
+        bool linked = row.MetronArcId is not null || row.ComicVineArcId is not null || row.GcdArcId is not null;
+        string? connectionString = context.Database.GetConnectionString();
+        var runner = new EventSmartFillRunner
         {
-            if (string.IsNullOrWhiteSpace(arcId)) continue;
-            var source = ReadingListSourceRegistry.Get(context, sourceKey);
-            if (source is null) continue;
-            attempted = true;
-            try
-            {
-                var info = await source.GetArcOverviewAsync(arcId, cancellationToken).ConfigureAwait(false);
-                if (info is null) continue;
-                providerUsed ??= sourceKey;
-                if (string.IsNullOrWhiteSpace(storyEvent.Description) && !string.IsNullOrWhiteSpace(info.Description))
-                { storyEvent.Description = info.Description; detailsChanged = true; }
-                if (storyEvent.CoverSource != StoryEventCoverSource.Manual && !string.IsNullOrWhiteSpace(info.CoverImageUrl)
-                    && storyEvent.CoverImageUrl != info.CoverImageUrl)
-                {
-                    storyEvent.CoverImageUrl = info.CoverImageUrl;
-                    storyEvent.CoverSource = sourceKey == "Metron" ? StoryEventCoverSource.Metron : StoryEventCoverSource.ComicVine;
-                    detailsChanged = true;
-                }
-                if (!string.IsNullOrWhiteSpace(storyEvent.Description)
-                    && (storyEvent.CoverSource == StoryEventCoverSource.Manual || !string.IsNullOrWhiteSpace(storyEvent.CoverImageUrl))) break;
-            }
-            catch (OperationCanceledException) { throw; }
-            catch { /* Report the attempt in the UI; provider/network failures leave the event usable. */ }
-        }
-
-        if (attempted)
-        {
-            storyEvent.DetailsCheckedAt = DateTime.UtcNow;
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-        return new RefreshResult(true, attempted, detailsChanged, providerUsed);
+            ContextFactory = () => new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite(connectionString).Options),
+        };
+        var proposal = await runner.FetchAsync(eventId, cancellationToken).ConfigureAwait(false);
+        var result = await runner.ApplyAsync(proposal, null, Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
+        var checkedSources = proposal.Sources.Where(s => s.Status is "Checked" or "No data" or "Incomplete").ToArray();
+        return new(linked, checkedSources.Length > 0, result.Changed > 0, string.Join(", ", checkedSources.Select(s => s.Provider).Distinct()));
     }
 
     public static async Task<bool> CompleteAsync(PaperbunkrDbContext context, int continuityId, CancellationToken cancellationToken)
@@ -93,10 +61,12 @@ public static class StoryEventDetailsCompletion
                     var info = await source.GetArcOverviewAsync(arcId, cancellationToken).ConfigureAwait(false);
                     if (info is not null)
                     {
-                        if (string.IsNullOrWhiteSpace(storyEvent.Description) && !string.IsNullOrWhiteSpace(info.Description))
-                        { storyEvent.Description = info.Description; changed = true; }
-                        if (storyEvent.CoverSource != StoryEventCoverSource.Manual && string.IsNullOrWhiteSpace(storyEvent.CoverImageUrl)
-                            && !string.IsNullOrWhiteSpace(info.CoverImageUrl))
+                        string? synopsis = EventDescriptionText.Overview(info.Deck) ?? EventDescriptionText.Overview(info.Description);
+                        if (EventMetadataStore.Eligible(context, storyEvent, EventMetadataField.Description) && synopsis is not null)
+                        { storyEvent.Description = synopsis; changed = true; }
+                        if (EventMetadataStore.Eligible(context, storyEvent, EventMetadataField.Cover)
+                            && !string.IsNullOrWhiteSpace(info.CoverImageUrl)
+                            && await StoryEventCoverCache.DownloadAndCacheAsync(storyEvent.Id, info.CoverImageUrl, cancellationToken).ConfigureAwait(false))
                         { storyEvent.CoverImageUrl = info.CoverImageUrl; storyEvent.CoverSource = sourceKey == "Metron" ? StoryEventCoverSource.Metron : StoryEventCoverSource.ComicVine; changed = true; }
                     }
                 }

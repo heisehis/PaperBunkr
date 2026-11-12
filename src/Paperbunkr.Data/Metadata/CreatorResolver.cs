@@ -85,7 +85,7 @@ public static class CreatorResolver
     }
 
     /// <summary>Backfills the whole library - idempotent, safe to re-run.</summary>
-    public static void RebuildAll(PaperbunkrDbContext context)
+    public static void RebuildAll(PaperbunkrDbContext context, System.Threading.CancellationToken cancellationToken = default)
     {
         // RoleFields' delegates can't be translated by EF's query provider, so the "any credit field
         // is non-empty" filter is written out plainly here rather than via RoleFields.Any(...).
@@ -98,19 +98,21 @@ public static class CreatorResolver
                 (i.Letterer != null && i.Letterer != "") ||
                 (i.CoverArtist != null && i.CoverArtist != "") ||
                 (i.Editor != null && i.Editor != "") ||
-                (i.Translator != null && i.Translator != ""))
+                (i.Translator != null && i.Translator != "") ||
+                context.CreatorCredits.Any(c => c.IssueId == i.Id))
             .Select(i => i.Id)
             .ToList();
 
         foreach (int id in issueIds)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             SyncFromIssue(context, id);
         }
     }
 
     private static void PruneOrphans(PaperbunkrDbContext context)
     {
-        var orphans = context.Creators.Where(c => !c.Credits.Any()).ToList();
+        var orphans = context.Creators.Where(c => !c.Credits.Any() && c.CustomImagePath == null).ToList();
         if (orphans.Count > 0)
         {
             context.Creators.RemoveRange(orphans);

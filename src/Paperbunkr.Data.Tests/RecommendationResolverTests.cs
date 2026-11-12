@@ -9,7 +9,7 @@ namespace Paperbunkr.Data.Tests;
 /// model-phase6a-recommendation-engine-design.md) against a real SQLite database - same rationale
 /// as <see cref="MediaRelationResolverTests"/>/<see cref="ContinuityResolverTests"/>.
 /// </summary>
-public class RecommendationResolverTests : IDisposable
+public partial class RecommendationResolverTests : IDisposable
 {
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
@@ -37,6 +37,7 @@ public class RecommendationResolverTests : IDisposable
     private static int SeedSeries(PaperbunkrDbContext context, string name, string? genre = null)
     {
         var series = new Series { Name = name, Genre = genre };
+        series.Issues.Add(new Issue { Number = "0" });
         context.Series.Add(series);
         context.SaveChanges();
         return series.Id;
@@ -52,6 +53,7 @@ public class RecommendationResolverTests : IDisposable
 
         context.Issues.Add(issue);
         context.SaveChanges();
+        EntityIndexSync.SyncIssue(context, issue.Id);
         return issue.Id;
     }
 
@@ -158,7 +160,7 @@ public class RecommendationResolverTests : IDisposable
     }
 
     [Fact]
-    public void GetRecommendations_GenreOverlapWithNoRelationalAnchor_DoesNotAppearAsCandidate()
+    public void GetRecommendations_GenreOverlapWithNoRelationalAnchor_AppearsAsCandidate()
     {
         using var context = new PaperbunkrDbContext(_dbOptions);
         int sourceId = SeedSeries(context, "Source Series", genre: "Fantasy");
@@ -166,7 +168,7 @@ public class RecommendationResolverTests : IDisposable
 
         var results = RecommendationResolver.GetRecommendations(context, sourceId);
 
-        Assert.Empty(results);
+        Assert.Equal(RecommendationReason.SharedGenre, Assert.Single(results).ReasonType);
     }
 
     [Fact]

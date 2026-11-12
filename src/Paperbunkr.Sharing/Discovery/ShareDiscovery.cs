@@ -30,6 +30,26 @@ public static class ShareDiscovery
     };
 
     /// <summary>Parses TXT strings ("key=value") into a <see cref="DiscoveredHost"/>, or null when they aren't from a compatible Paperbunkr.</summary>
+    /// <summary>
+    /// Which advertised address to pre-fill, lowest first: a private IPv4 (the LAN), then other IPv4, then IPv6, with self-assigned
+    /// 169.254 addresses last. Older hosts advertise every adapter, so the first IPv4 alone was often unreachable.
+    /// </summary>
+    public static int AddressPreference(IPAddress address)
+    {
+        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            return 3;
+        }
+
+        byte[] b = address.GetAddressBytes();
+        if (b[0] == 169 && b[1] == 254)
+        {
+            return 4;
+        }
+
+        return Server.PrivateNetwork.IsPrivateOrLoopback(address) ? 0 : 2;
+    }
+
     public static DiscoveredHost? TryParse(IEnumerable<string> txt, string address, int port)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -63,7 +83,11 @@ public static class ShareDiscovery
         {
             try
             {
-                _profile = new ServiceProfile(SafeInstanceName(displayName, instanceId), ServiceType, (ushort)port);
+                // Only the addresses the LAN can reach (LanAddresses): with null the library advertises every adapter, and a
+                // browser - including a 0.8.2 one, which takes the first IPv4 it sees - could pick a Hyper-V/WSL switch.
+                // Nothing usable (no network yet) falls back to the library's own list rather than advertising no address.
+                IReadOnlyList<System.Net.IPAddress> lan = LanAddresses.Current();
+                _profile = new ServiceProfile(SafeInstanceName(displayName, instanceId), ServiceType, (ushort)port, lan.Count > 0 ? lan : null);
                 foreach (var pair in BuildTxt(instanceId, displayName))
                 {
                     _profile.AddProperty(pair.Key, pair.Value);
@@ -142,7 +166,7 @@ public static class ShareDiscovery
                     {
                         var txt = records.OfType<TXTRecord>().Where(t => t.Name == srv.Name).SelectMany(t => t.Strings).ToList();
                         IPAddress? ip = records.OfType<AddressRecord>().Where(a => a.Name == srv.Target).Select(a => a.Address)
-                            .OrderBy(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? 0 : 1).FirstOrDefault();
+                            .OrderBy(AddressPreference).FirstOrDefault();
                         string address = ip?.ToString() ?? srv.Target.ToString().TrimEnd('.');
                         DiscoveredHost? host = TryParse(txt, address, srv.Port);
                         if (host is not null)

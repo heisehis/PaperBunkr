@@ -130,6 +130,8 @@ public sealed class MetadataEditHistoryService
         }
 
         context.SaveChanges();
+        // Undo/Redo can put back characters, teams, locations or credits (docs/superpowers/specs/2026-11-10-series-structure-and-discovery-plan.md D1.1).
+        LibraryFolderScanner.SyncEntityIndexes(context, snapshots.Keys);
         var identityAfter = ReadingListHealingCoordinator.Capture(context, snapshots.Keys);
         var changed = ReadingListHealingCoordinator.Changed(identityBefore, identityAfter);
         return changed.Count == 0 ? HealResult.Nothing : ReadingListHealer.RecheckFor(context, changed);

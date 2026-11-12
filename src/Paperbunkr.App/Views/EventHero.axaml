@@ -89,16 +89,17 @@
                     </StackPanel>
                 </Button>
                 <Button Classes="secondary" Command="{Binding ToggleAddIssuesCommand}"><StackPanel Orientation="Horizontal" Spacing="6"><fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Add issues" VerticalAlignment="Center" /></StackPanel></Button>
-                <Button Classes="ghost" Command="{Binding RefreshProviderDetailsCommand}" IsEnabled="{Binding !IsRefreshingProviderDetails}" AutomationProperties.Name="Refresh provider details"
-                        ToolTip.Tip="Fetch missing description and refresh the provider cover">
+                <Button Classes="ghost" Command="{Binding SmartFillCommand}" IsEnabled="{Binding !IsRefreshingProviderDetails}" AutomationProperties.Name="Smart fill event metadata"
+                        ToolTip.Tip="Fill supported blanks; preserve existing and deliberately cleared values">
                     <Panel>
-                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding !IsRefreshingProviderDetails}"><fi:SymbolIcon Symbol="ArrowClockwise" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" /><TextBlock Text="Refresh provider details" /></StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding !IsRefreshingProviderDetails}"><fi:SymbolIcon Symbol="ArrowClockwise" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" /><TextBlock Text="Smart fill" /></StackPanel>
                         <TextBlock Text="Fetching…" IsVisible="{Binding IsRefreshingProviderDetails}" />
                     </Panel>
                 </Button>
                 <Button Classes="secondary" AutomationProperties.Name="Manage event"><StackPanel Orientation="Horizontal" Spacing="6"><fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Manage" VerticalAlignment="Center" /></StackPanel>
                     <Button.Flyout>
                         <MenuFlyout>
+                            <MenuItem Header="Compare sources…" Command="{Binding CompareSourcesCommand}" />
                             <MenuItem Header="Edit details…"
                                       Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenEditEventDialogCommand}" />
                             <MenuItem Header="Continue setup…"

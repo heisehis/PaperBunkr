@@ -29,6 +29,7 @@ public partial class ThemeService
         var materials = new ThemeMaterialBuilder(theme, quality, path => _catalog.OpenAsset(theme.FamilyKey, path), _materialImages);
 
         ThemeSkinProjector.Project(theme, plan, materials, diagnostics);
+        ProjectPersonalization(plan);
         ProjectScrollbar(theme, plan);
 
         _applyDiagnostics = diagnostics;

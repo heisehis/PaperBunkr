@@ -288,6 +288,8 @@ public static class IssueListFieldCatalog
         [IssueListGroupField.Language] = MakeGroup(IssueListGroupField.Language, "Language", GroupStrategies.Alphabetical(r => r.LanguageIso)),
         [IssueListGroupField.AgeRating] = MakeGroup(IssueListGroupField.AgeRating, "Age Rating", GroupStrategies.Alphabetical(r => r.AgeRating)),
         [IssueListGroupField.StoryArc] = MakeGroup(IssueListGroupField.StoryArc, "Story Arc", GroupStrategies.Alphabetical(r => r.StoryArc)),
+        [IssueListGroupField.Writer] = MakeGroup(IssueListGroupField.Writer, "Writer", GroupStrategies.Alphabetical(r => r.Writer)),
+        [IssueListGroupField.MainCharacterOrTeam] = MakeGroup(IssueListGroupField.MainCharacterOrTeam, "Main character or team", GroupStrategies.Alphabetical(r => r.MainCharacterOrTeam)),
         [IssueListGroupField.SeriesGroup] = MakeGroup(IssueListGroupField.SeriesGroup, "Series Group", GroupStrategies.Alphabetical(r => r.SeriesGroup)),
         [IssueListGroupField.FileName] = MakeGroup(IssueListGroupField.FileName, "File Name", GroupStrategies.Alphabetical(r => r.FileName)),
         [IssueListGroupField.FileDirectory] = MakeGroup(IssueListGroupField.FileDirectory, "File Directory", GroupStrategies.Alphabetical(r => r.FileDirectory)),

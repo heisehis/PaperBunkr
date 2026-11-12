@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="using:Paperbunkr.App.Models" xmlns:conv="using:Avalonia.Data.Converters"
+             x:Class="Paperbunkr.App.Views.StructureSectionHeader" x:DataType="models:IssueRunGroup">
+    <StackPanel Spacing="8" Margin="0,12,0,12" IsVisible="{Binding Header, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+        <TextBlock Classes="pbTextSection" Text="{Binding Header}" TextWrapping="Wrap" />
+        <StackPanel Spacing="8" IsVisible="{Binding HasStructure}">
+            <TextBlock Classes="pbTextMeta" Text="{Binding Subtitle}" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="*,Auto">
+                <ProgressBar Value="{Binding ReadPercent}" Maximum="100" VerticalAlignment="Center" Margin="0,0,12,0"
+                             Foreground="{DynamicResource PbAccentBrush}" Background="{DynamicResource PbSurface3Brush}" />
+                <TextBlock Grid.Column="1" Classes="pbTextCaption" Text="{Binding ProgressLabel}" />
+            </Grid>
+            <WrapPanel>
+                <Button Content="{Binding ReadLabel}" Classes.secondary="{Binding !IsFirstSection}" Classes.primary="{Binding IsFirstSection}" Command="{Binding ReadCommand}" Margin="0,0,8,0" />
+                <Button Content="Save as reading list" Classes="ghost" Command="{Binding SaveCommand}" />
+            </WrapPanel>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

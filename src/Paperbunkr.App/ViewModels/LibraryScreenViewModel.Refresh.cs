@@ -215,6 +215,8 @@ public partial class LibraryScreenViewModel
         }
 
         context.SaveChanges();
+        // The re-read may have changed characters, teams, locations or credits (docs/superpowers/specs/2026-11-10-series-structure-and-discovery-plan.md D1.1).
+        Services.LibraryFolderScanner.SyncEntityIndexes(context, after.Keys);
         return new RereadResult(before, after, updated, noInfo, failed);
     }
 }

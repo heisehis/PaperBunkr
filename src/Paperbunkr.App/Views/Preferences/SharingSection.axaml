@@ -68,6 +68,12 @@
                     <TextBlock Text="{Binding ClientsText}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                 </StackPanel>
 
+                <!-- The address to type on the other computer. Selectable so it can be copied; wraps when there are several. -->
+                <SelectableTextBlock Text="{Binding ConnectAddressText}" IsVisible="{Binding HasConnectAddress}" FontSize="13" FontWeight="SemiBold"
+                                     TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" Margin="0,0,0,8"
+                                     Foreground="{DynamicResource PbTextBrush}"
+                                     AutomationProperties.AutomationId="SharingConnectAddress" />
+
                 <Border IsVisible="{Binding HasNetworkWarning}" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="10" MaxWidth="640"
                         HorizontalAlignment="Left" Margin="0,0,0,6">
                     <StackPanel Orientation="Horizontal" Spacing="8">

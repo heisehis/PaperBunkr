@@ -10,6 +10,21 @@ namespace Paperbunkr.App.Tests.Reader;
 [Collection(nameof(AvaloniaTestCollection))]
 public class NextIssueStagerTests : IDisposable
 {
+    [Fact]
+    public async Task QueueAnchor_IsPassedToTheWorker()
+    {
+        var queue = new ReadingQueue(new[] { 1, 3 }, "Storm");
+        ReadingQueue? received = null;
+        using var stager = new NextIssueStager((int issueId, int? seriesId, int? listId, int? eventId, ReadingQueue? captured) =>
+        {
+            received = captured;
+            return null;
+        });
+        stager.EnsureStaged(1, null, null, null, 800, queue: queue);
+        await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Same(queue, received);
+    }
+
     private readonly List<string> _files = new();
     private readonly List<ReaderImagePipeline> _disposedByStager = new();
     private readonly List<ReaderImagePipeline> _leaked = new();

@@ -25,6 +25,19 @@ public static class PanelDetectionService
     // Readers are inferences in flight; the writer is Unload, which must not free the native session under one of them.
     private static readonly System.Threading.ReaderWriterLockSlim SessionLock = new();
     private static string? _modelPath;
+    private static string? _modelSha256;
+
+    /// <summary>
+    /// Which model is bundled, recorded in "Report bad panel detection" so reports made with different models can be told apart
+    /// (docs/superpowers/specs/2026-11-07-panel-model-retraining-design.md, Q18). Change it whenever <c>PanelModel/panel-detector.onnx</c> changes.
+    /// </summary>
+    public const string ModelName = "manga-panel-detector-yolo26n-onnx1024";
+
+    /// <summary>SHA-256 of the loaded model file (lower-case hex), or null while no model is loaded. Computed once, when the model loads.</summary>
+    public static string? ModelSha256
+    {
+        get { lock (Gate) { return _onnx is null ? null : _modelSha256; } }
+    }
 
     /// <summary>Where the model file lives. Defaults to <c>Models/panel-detector.onnx</c> next to the executable; the harness overrides it.</summary>
     public static string ModelPath
@@ -35,6 +48,7 @@ public static class PanelDetectionService
             lock (Gate)
             {
                 _modelPath = value;
+                _modelSha256 = null;
                 _onnx?.Dispose();
                 _onnx = null;
                 _onnxTried = false;
@@ -77,6 +91,9 @@ public static class PanelDetectionService
                 if (File.Exists(ModelPath))
                 {
                     _onnx = new OnnxPanelDetector(ModelPath, UseCpuArena);
+
+                    // Loading already runs off the UI thread (the detection queue); hashing the 10 MB file adds a few milliseconds, once.
+                    _modelSha256 ??= HashFile(ModelPath);
                 }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -86,6 +103,19 @@ public static class PanelDetectionService
             }
 
             return _onnx;
+        }
+    }
+
+    private static string? HashFile(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream)).ToLowerInvariant();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
         }
     }
 

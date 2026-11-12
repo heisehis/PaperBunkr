@@ -25,7 +25,8 @@ public static class EventMapLayout
     /// <summary><see cref="EventMapEdge.ColorIndex"/> for a relay chain edge that hops lanes (drawn in the muted text colour).</summary>
     public const int MutedColor = -2;
 
-    public static EventMapLayoutResult Compute(EventMapSource source, SpineChoice spine, EventMapFilter filter, EventMapDensity density)
+    public static EventMapLayoutResult Compute(EventMapSource source, SpineChoice spine, EventMapFilter filter, EventMapDensity density, bool relayPacked = false,
+        bool hideRead = false, int? keepReadIssueId = null, bool foldShortLanes = false, IReadOnlySet<int>? hiddenSeriesIds = null)
     {
         var metrics = EventMapDensityMetrics.For(density);
         var ordered = source.Rows.OrderBy(r => r.Position).ThenBy(r => r.MembershipId).ToList();
@@ -45,20 +46,21 @@ public static class EventMapLayout
             kept = kept.Where(IsTrunkRow);
         }
 
-        var rows = kept.ToList();
+        var rows = kept.Where(r => (!hideRead || r.ReadState != EventMapReadState.Read || r.IssueId == keepReadIssueId)
+            && (hiddenSeriesIds is null || !hiddenSeriesIds.Contains(r.SeriesId))).ToList();
         bool spineMode = spineId is not null && rows.Any(IsTrunkRow);
         string spineName = spineId is int sid
             ? source.Rows.FirstOrDefault(r => r.SeriesId == sid)?.SeriesName ?? string.Empty
             : string.Empty;
 
         return spineMode
-            ? ComputeSpine(rows, rows.Select(IsTrunkRow).ToArray(), spine, spineName, filter, density, metrics)
-            : ComputeRelay(rows, spine, filter, density, metrics);
+            ? ComputeSpine(rows, rows.Select(IsTrunkRow).ToArray(), spine, spineName, filter, density, metrics, foldShortLanes, source.SeriesRelations)
+            : ComputeRelay(rows, spine, filter, density, metrics, relayPacked, foldShortLanes);
     }
 
     private static EventMapLayoutResult ComputeSpine(
         List<EventMapRow> rows, bool[] isTrunk, SpineChoice spine, string spineName,
-        EventMapFilter filter, EventMapDensity density, EventMapDensityMetrics metrics)
+        EventMapFilter filter, EventMapDensity density, EventMapDensityMetrics metrics, bool foldShortLanes, IReadOnlyList<MapSeriesRelation>? relations)
     {
         int spineId = spine.SeriesId!.Value;
 
@@ -72,11 +74,18 @@ public static class EventMapLayout
 
         var laneSeries = rows.Where((_, i) => !isTrunk[i]).Select(r => r.SeriesId).Distinct()
             .OrderBy(id => firstIndex[id]).ToList();
+        var colors = laneSeries.Select((id, k) => (id, color: k % LaneColorCount)).ToDictionary(x => x.id, x => x.color);
+        var seriesCounts = rows.GroupBy(r => r.SeriesId).ToDictionary(g => g.Key, g => g.Count());
+        var folded = foldShortLanes && laneSeries.Count + 1 >= 8
+            ? laneSeries.Where(id => seriesCounts[id] <= 2).ToHashSet() : new HashSet<int>();
+        if (folded.Count < 3) folded.Clear();
+        var visibleSeries = laneSeries.Where(id => !folded.Contains(id)).ToList();
         var laneTrack = new Dictionary<int, int>();
-        for (int k = 0; k < laneSeries.Count; k++)
+        for (int k = 0; k < visibleSeries.Count; k++)
         {
-            laneTrack[laneSeries[k]] = k + 1;
+            laneTrack[visibleSeries[k]] = k + 1;
         }
+        foreach (int id in folded) laneTrack[id] = visibleSeries.Count + 1;
 
         // Columns: compact packing. A trunk row takes the next free column and opens a segment one column later;
         // a lane row takes the later of the segment start and its own lane's next free column.
@@ -106,16 +115,21 @@ public static class EventMapLayout
             }
 
             maxColumn = Math.Max(maxColumn, column);
-            cells.Add(new EventMapCell(i, rows[i], track, column, segment, isTrunk[i]));
+            cells.Add(new EventMapCell(i, rows[i], track, column, segment, isTrunk[i],
+                !isTrunk[i] && folded.Contains(rows[i].SeriesId) ? colors[rows[i].SeriesId] : null));
         }
 
-        var tracks = new List<EventMapTrack> { new(0, spineId, spineName, IsTrunk: true, TrunkColor, cells.Count(c => c.IsTrunk)) };
-        for (int k = 0; k < laneSeries.Count; k++)
+        var tracks = new List<EventMapTrack> { new(0, spineId, spineName, IsTrunk: true, TrunkColor, cells.Count(c => c.IsTrunk), RelationLabel: "main") };
+        for (int k = 0; k < visibleSeries.Count; k++)
         {
-            int seriesId = laneSeries[k];
+            int seriesId = visibleSeries[k];
             var laneCells = cells.Where(c => c.Track == k + 1).ToList();
-            tracks.Add(new EventMapTrack(k + 1, seriesId, laneCells[0].Row.SeriesName, IsTrunk: false, k % LaneColorCount, laneCells.Count));
+            tracks.Add(new EventMapTrack(k + 1, seriesId, laneCells[0].Row.SeriesName, IsTrunk: false, colors[seriesId], laneCells.Count,
+                RelationLabel: LaneRelationLabel(seriesId, relations, spineId)));
         }
+        if (folded.Count > 0)
+            tracks.Add(new EventMapTrack(visibleSeries.Count + 1, 0, $"Short tie-ins · {folded.Count} series", false, MutedColor,
+                cells.Count(c => !c.IsTrunk && folded.Contains(c.Row.SeriesId)), IsFolded: true));
 
         var byTrack = GroupByTrack(cells, tracks.Count);
         var edges = new List<EventMapEdge>();
@@ -123,18 +137,21 @@ public static class EventMapLayout
         foreach (var track in tracks)
         {
             var list = byTrack[track.Index];
-            for (int j = 1; j < list.Count; j++)
+            foreach (var seriesCells in list.GroupBy(i => track.IsTrunk ? spineId : cells[i].Row.SeriesId))
             {
-                edges.Add(MakeEdge(EventMapEdgeKind.Sequence, cells[list[j - 1]], cells[list[j]], track.ColorIndex));
+                var sequence = seriesCells.ToList();
+                for (int j = 1; j < sequence.Count; j++)
+                    edges.Add(MakeEdge(EventMapEdgeKind.Sequence, cells[sequence[j - 1]], cells[sequence[j]],
+                        cells[sequence[j - 1]].ColorIndexOverride ?? track.ColorIndex));
             }
         }
 
         foreach (var seg in segments.Where(s => s.TrunkCell is not null))
         {
             var trunk = cells[seg.TrunkCell!.Value];
-            foreach (var track in tracks.Where(t => !t.IsTrunk))
+            foreach (int seriesId in laneSeries)
             {
-                int first = byTrack[track.Index].FirstOrDefault(ci => cells[ci].Segment == seg.Index, -1);
+                int first = byTrack[laneTrack[seriesId]].FirstOrDefault(ci => cells[ci].Segment == seg.Index && cells[ci].Row.SeriesId == seriesId, -1);
                 if (first >= 0)
                 {
                     edges.Add(MakeEdge(EventMapEdgeKind.TieIn, trunk, cells[first], TrunkColor));
@@ -155,18 +172,29 @@ public static class EventMapLayout
     }
 
     private static EventMapLayoutResult ComputeRelay(
-        List<EventMapRow> rows, SpineChoice spine, EventMapFilter filter, EventMapDensity density, EventMapDensityMetrics metrics)
+        List<EventMapRow> rows, SpineChoice spine, EventMapFilter filter, EventMapDensity density, EventMapDensityMetrics metrics, bool packed, bool foldShortLanes)
     {
         var laneSeries = rows.Select(r => r.SeriesId).Distinct().ToList();     // first appearance = first Position
-        var laneTrack = laneSeries.Select((id, k) => (id, k)).ToDictionary(x => x.id, x => x.k);
+        var colors = laneSeries.Select((id, k) => (id, color: k % LaneColorCount)).ToDictionary(x => x.id, x => x.color);
+        var seriesCounts = rows.GroupBy(r => r.SeriesId).ToDictionary(g => g.Key, g => g.Count());
+        var folded = foldShortLanes && laneSeries.Count >= 8
+            ? laneSeries.Where(id => seriesCounts[id] <= 2).ToHashSet() : new HashSet<int>();
+        if (folded.Count < 3) folded.Clear();
+        var visibleSeries = laneSeries.Where(id => !folded.Contains(id)).ToList();
+        var laneTrack = visibleSeries.Select((id, k) => (id, k)).ToDictionary(x => x.id, x => x.k);
+        foreach (int id in folded) laneTrack[id] = visibleSeries.Count;
 
-        // Strict columns: every row gets its own column, so the chain always moves right.
-        var cells = rows.Select((row, i) => new EventMapCell(i, row, laneTrack[row.SeriesId], i, 0, IsTrunk: false)).ToList();
-        var tracks = laneSeries.Select((id, k) =>
+        var columns = WaveColumns(rows.Select(r => laneTrack[r.SeriesId]), packed);
+        var cells = rows.Select((row, i) => new EventMapCell(i, row, laneTrack[row.SeriesId], columns[i], 0, IsTrunk: false,
+            ColorIndexOverride: folded.Contains(row.SeriesId) ? colors[row.SeriesId] : null)).ToList();
+        var tracks = visibleSeries.Select((id, k) =>
         {
             var laneCells = cells.Where(c => c.Track == k).ToList();
-            return new EventMapTrack(k, id, laneCells[0].Row.SeriesName, IsTrunk: false, k % LaneColorCount, laneCells.Count);
+            return new EventMapTrack(k, id, laneCells[0].Row.SeriesName, IsTrunk: false, colors[id], laneCells.Count);
         }).ToList();
+        if (folded.Count > 0)
+            tracks.Add(new EventMapTrack(visibleSeries.Count, 0, $"Short tie-ins · {folded.Count} series", false, MutedColor,
+                cells.Count(c => folded.Contains(c.Row.SeriesId)), IsFolded: true));
 
         var edges = new List<EventMapEdge>();
         for (int i = 1; i < cells.Count; i++)
@@ -177,7 +205,46 @@ public static class EventMapLayout
         }
 
         return new EventMapLayoutResult(false, spine, filter, density, metrics, cells, tracks, edges,
-            new List<EventMapSegment> { new(0, null, 0) }, cells.Count);
+            new List<EventMapSegment> { new(0, null, 0) }, cells.Count == 0 ? 0 : columns[^1] + 1,
+            columnLabels: packed ? PositionLabels(cells, cells.Count == 0 ? 0 : columns[^1] + 1) : null);
+    }
+
+    private static int[] WaveColumns(IEnumerable<int> lanes, bool packed)
+    {
+        var used = new HashSet<int>();
+        var columns = new List<int>();
+        int column = 0;
+        foreach (int lane in lanes)
+        {
+            if (columns.Count > 0 && (!packed || used.Contains(lane))) { column++; used.Clear(); }
+            columns.Add(column);
+            used.Add(lane);
+        }
+        return columns.ToArray();
+    }
+
+    private static string? LaneRelationLabel(int id, IReadOnlyList<MapSeriesRelation>? relations, int? spineId = null)
+    {
+        if (id < 0) return "none owned";                 // a lane made only of missing issues (M4)
+        if (relations is null) return null;
+        var applicable = relations.Where(r => (r.Source == id || r.Target == id)
+            && (spineId is null || r.Source == spineId || r.Target == spineId)).ToList();
+        if (applicable.Any(r => r.Source == id && r.Type == RelationType.MainEventSeries && r.IsUser)) return "main";
+        if (applicable.Any(r => r.Source == id && r.Type == RelationType.TieIn || r.Target == id && r.Type == RelationType.MainEventSeries)) return "tie-in";
+        if (applicable.Any(r => r.Type == RelationType.SideStory)) return "side story";
+        return null;
+    }
+
+    private static IReadOnlyList<string?> PositionLabels(IReadOnlyList<EventMapCell> cells, int count)
+    {
+        var labels = new string?[count];
+        foreach (var group in cells.GroupBy(cell => cell.Column))
+        {
+            int first = group.First().Row.Position, last = group.Last().Row.Position;
+            labels[group.Key] = first == last ? first.ToString(CultureInfo.CurrentCulture)
+                : $"{first.ToString(CultureInfo.CurrentCulture)}–{last.ToString(CultureInfo.CurrentCulture)}";
+        }
+        return labels;
     }
 
     /// <summary>
@@ -188,10 +255,18 @@ public static class EventMapLayout
     /// stretch of publication history reads as a timeline instead of one card at a time. There only consecutive issues of the same lane
     /// are joined (publication order isn't a reading path). Nothing crosses a block boundary.
     /// </summary>
-    public static EventMapLayoutResult ComputeBlocks(ContinuityMapSource source, EventMapDensity density)
+    public static EventMapLayoutResult ComputeBlocks(ContinuityMapSource source, EventMapDensity density, bool relayPacked = false, bool foldShortLanes = false)
     {
         var metrics = EventMapDensityMetrics.For(density);
-        var laneTrack = source.Lanes.Select((l, k) => (l.SeriesId, k)).ToDictionary(x => x.SeriesId, x => x.k);
+        var colors = source.Lanes.Select((l, k) => (l.SeriesId, color: k % LaneColorCount)).ToDictionary(x => x.SeriesId, x => x.color);
+        var seriesCounts = source.Rows.GroupBy(r => r.SeriesId).ToDictionary(g => g.Key, g => g.Count());
+        var folded = foldShortLanes && source.Lanes.Count >= 8
+            ? source.Lanes.Where(l => seriesCounts.GetValueOrDefault(l.SeriesId) <= 2).Select(l => l.SeriesId).ToHashSet()
+            : new HashSet<int>();
+        if (folded.Count < 3) folded.Clear();
+        var visibleLanes = source.Lanes.Where(l => !folded.Contains(l.SeriesId)).ToList();
+        var laneTrack = visibleLanes.Select((l, k) => (l.SeriesId, k)).ToDictionary(x => x.SeriesId, x => x.k);
+        foreach (int id in folded) laneTrack[id] = visibleLanes.Count;
         var columns = new int[source.Rows.Count];
         var columnLabels = new List<string?>();
         var blockColumns = new (int First, int Last)[source.Blocks.Count];
@@ -200,10 +275,19 @@ public static class EventMapLayout
             int first = columnLabels.Count;
             if (block.Kind is EventMapBlockKind.Event or EventMapBlockKind.Unplaced)
             {
+                var wave = WaveColumns(source.Rows.Skip(block.FirstRow).Take(block.LastRow - block.FirstRow + 1)
+                    .Select(row => laneTrack[row.SeriesId]), relayPacked);
                 for (int r = block.FirstRow; r <= block.LastRow; r++)
                 {
-                    columns[r] = columnLabels.Count;
-                    columnLabels.Add((r - block.FirstRow + 1).ToString(CultureInfo.CurrentCulture));
+                    int local = r - block.FirstRow;
+                    columns[r] = first + wave[local];
+                    string position = (relayPacked ? source.Rows[r].Position : local + 1).ToString(CultureInfo.CurrentCulture);
+                    if (columnLabels.Count <= columns[r]) columnLabels.Add(position);
+                    else
+                    {
+                        string start = columnLabels[columns[r]]!.Split('–')[0];
+                        columnLabels[columns[r]] = $"{start}–{position}";
+                    }
                 }
             }
             else
@@ -236,10 +320,15 @@ public static class EventMapLayout
         }
 
         var cells = source.Rows
-            .Select((row, i) => new EventMapCell(i, row, laneTrack[row.SeriesId], columns[i], row.BlockIndex, IsTrunk: false))
+            .Select((row, i) => new EventMapCell(i, row, laneTrack[row.SeriesId], columns[i], row.BlockIndex, IsTrunk: false,
+                ColorIndexOverride: folded.Contains(row.SeriesId) ? colors[row.SeriesId] : null))
             .ToList();
-        var tracks = source.Lanes.Select((l, k) => new EventMapTrack(
-            k, l.SeriesId, l.Name, IsTrunk: false, k % LaneColorCount, cells.Count(c => c.Track == k), l.Outside)).ToList();
+        var tracks = visibleLanes.Select((l, k) => new EventMapTrack(
+            k, l.SeriesId, l.Name, IsTrunk: false, colors[l.SeriesId], cells.Count(c => c.Track == k), l.Outside,
+            RelationLabel: LaneRelationLabel(l.SeriesId, source.SeriesRelations))).ToList();
+        if (folded.Count > 0)
+            tracks.Add(new EventMapTrack(visibleLanes.Count, 0, $"Short tie-ins · {folded.Count} series", false, MutedColor,
+                cells.Count(c => folded.Contains(c.Row.SeriesId)), IsFolded: true));
 
         var edges = new List<EventMapEdge>();
         foreach (var block in source.Blocks)
@@ -256,12 +345,12 @@ public static class EventMapLayout
             }
             else
             {
-                foreach (var lane in inBlock.GroupBy(c => c.Track))
+                foreach (var lane in inBlock.GroupBy(c => c.Row.SeriesId))
                 {
                     var list = lane.ToList();
                     for (int i = 1; i < list.Count; i++)
                     {
-                        edges.Add(MakeEdge(EventMapEdgeKind.Sequence, list[i - 1], list[i], tracks[lane.Key].ColorIndex));
+                        edges.Add(MakeEdge(EventMapEdgeKind.Sequence, list[i - 1], list[i], list[i - 1].ColorIndexOverride ?? tracks[list[i - 1].Track].ColorIndex));
                     }
                 }
             }
@@ -427,6 +516,57 @@ public sealed class EventMapLayoutResult
             m.CardHeight);
     }
 
+    /// <summary>Card geometry at the supplied screen-space zoom, independent of the legacy density.</summary>
+    public Rect CardRect(int index, EventMapMetrics metrics)
+    {
+        var cell = Cells[index];
+        double width = EventMapCardLooks.For(metrics.CardWidth) == EventMapCardLook.Dots
+            ? Math.Min(metrics.CardWidth, 12) : metrics.CardWidth;
+        return new Rect(
+            (cell.Column * metrics.SlotWidth) + ((metrics.SlotWidth - width) / 2),
+            (cell.Track * metrics.TrackHeight) + ((metrics.TrackHeight - metrics.CardHeight) / 2),
+            width, metrics.CardHeight);
+    }
+
+    public Size TotalSizeFor(EventMapMetrics metrics) => new(ColumnCount * metrics.SlotWidth, TrackCount * metrics.TrackHeight);
+
+    public IReadOnlyList<Point> EdgePoints(EventMapEdge edge, EventMapMetrics metrics)
+    {
+        var a = CardRect(edge.From, metrics);
+        var b = CardRect(edge.To, metrics);
+        var from = Cells[edge.From];
+        var to = Cells[edge.To];
+        if (edge.Kind == EventMapEdgeKind.Chain && from.Column == to.Column && from.Track != to.Track)
+            return from.Track < to.Track
+                ? new[] { new Point(a.Center.X, a.Bottom), new Point(b.Center.X, b.Top) }
+                : new[] { new Point(a.Center.X, a.Top), new Point(b.Center.X, b.Bottom) };
+        if (edge.Kind is EventMapEdgeKind.TieIn or EventMapEdgeKind.Continuity)
+        {
+            double gutterY = (to.Track * metrics.TrackHeight) + ((metrics.TrackHeight - metrics.CardHeight) / 4);
+            return new[] { new Point(a.Center.X, a.Bottom), new Point(a.Center.X, gutterY),
+                new Point(b.Center.X, gutterY), new Point(b.Center.X, b.Top) };
+        }
+        if (edge.Kind == EventMapEdgeKind.Chain && from.Track != to.Track)
+        {
+            double midX = (a.Right + b.Left) / 2;
+            return new[] { new Point(a.Right, a.Center.Y), new Point(midX, a.Center.Y),
+                new Point(midX, b.Center.Y), new Point(b.Left, b.Center.Y) };
+        }
+        return new[] { new Point(a.Right, a.Center.Y), new Point(b.Left, b.Center.Y) };
+    }
+
+    public EventMapVisibleRange VisibleRange(Rect viewport, EventMapMetrics metrics)
+    {
+        if (IsEmpty || viewport.Width <= 0 || viewport.Height <= 0)
+            return EventMapVisibleRange.Empty;
+        static (int First, int Last) Span(double start, double length, double size, int count) =>
+            (Math.Clamp((int)Math.Floor(start / size) - 1, 0, count - 1),
+             Math.Clamp((int)Math.Ceiling((start + length) / size), 0, count - 1));
+        var columns = Span(viewport.X, viewport.Width, metrics.SlotWidth, ColumnCount);
+        var tracks = Span(viewport.Y, viewport.Height, metrics.TrackHeight, TrackCount);
+        return new EventMapVisibleRange(columns.First, columns.Last, tracks.First, tracks.Last);
+    }
+
     /// <summary>
     /// The corner points of an edge's path, before rounding (spec §1 "Edge geometry"). Tie-in and continuity: trunk
     /// bottom-centre, straight down the trunk's column, along the target lane's top gutter, down into the target's
@@ -439,6 +579,11 @@ public sealed class EventMapLayoutResult
         var b = CardRect(edge.To);
         var from = Cells[edge.From];
         var to = Cells[edge.To];
+
+        if (edge.Kind == EventMapEdgeKind.Chain && from.Column == to.Column && from.Track != to.Track)
+            return from.Track < to.Track
+                ? new[] { new Point(a.Center.X, a.Bottom), new Point(b.Center.X, b.Top) }
+                : new[] { new Point(a.Center.X, a.Top), new Point(b.Center.X, b.Bottom) };
 
         switch (edge.Kind)
         {
@@ -597,7 +742,7 @@ public sealed class EventMapLayoutResult
     {
         foreach (var cell in Cells)
         {
-            if (cell.Row.ReadState != EventMapReadState.Read && (!IsSpineMode || cell.IsTrunk))
+            if (cell.Row.ReadState != EventMapReadState.Read && !cell.Row.IsGhost && (!IsSpineMode || cell.IsTrunk))
             {
                 return cell.Index;
             }

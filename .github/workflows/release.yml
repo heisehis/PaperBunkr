@@ -65,7 +65,9 @@ jobs:
             Write-Error "No CHANGELOG.md section found for version '$version' - add a '## [$version] - <date>' entry before tagging a release."
             exit 1
           }
-          $match.Value.Trim() | Out-File -FilePath release-notes.md -Encoding utf8
+          $notes = $match.Value.Trim()
+          $notes += "`n`n---`n`nBuilt with help from [Claude Code](https://claude.com/claude-code)."
+          $notes | Out-File -FilePath release-notes.md -Encoding utf8
 
       # Inno Setup builds the installer itself; windows-latest images stopped shipping it once the
       # underlying OS moved past Windows Server 2022 (github/actions runner-images#11644), so this
@@ -136,9 +138,15 @@ jobs:
       # asset - the bug in the 0.3.0/0.3.1-beta releases - makes every in-app "check for updates"
       # silently return "up to date" no matter what the appcast says. netsparkle-generate-appcast
       # writes it next to appcast.xml (see its "Wrote .\appcast.xml.signature" log line).
+      # Releases created with the default GITHUB_TOKEN are authored by "github-actions[bot]". When the
+      # repository has a RELEASE_TOKEN secret (a fine-grained personal access token of the maintainer
+      # with Contents: read and write on this repository), the release is created as that user instead.
+      # A release that already exists for the tag (e.g. created by hand with `gh release create`) keeps
+      # its original author; this step only updates it and uploads the assets.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
           name: "Paperbunkr ${{ steps.version.outputs.version }}"
           body_path: release-notes.md
           prerelease: false

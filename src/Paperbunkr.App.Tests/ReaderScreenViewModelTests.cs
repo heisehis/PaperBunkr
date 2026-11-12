@@ -2071,7 +2071,8 @@ public class ReaderScreenViewModelTests : IDisposable
     }
 
     private static Services.Reader.NextIssueStager NewStager(Func<string, int?, Services.Reader.ReaderImagePipeline?>? open = null) =>
-        new(ReaderScreenViewModel.ResolveStagingTarget, open);
+        new((int issueId, int? seriesId, int? listId, int? eventId) =>
+            ReaderScreenViewModel.ResolveStagingTarget(issueId, seriesId, listId, eventId), open);
 
     [Fact]
     public async Task Staging_ShortIssue_StagesTheNextIssueOnLoad()
@@ -5075,6 +5076,37 @@ public class ReaderScreenViewModelTests : IDisposable
 
         Assert.Equal("PAGE 1 / 1", vm.PageLabel);
         Assert.Contains("Other Series", vm.BreadcrumbSeries);
+    }
+
+    // ===== In-memory queue anchor (docs/superpowers/specs/2026-11-10-smart-features-2-plan.md correction 1) =====
+
+    [Fact]
+    public void NextPage_PastLastPage_FollowsTheQueue_AcrossSeries()
+    {
+        var queue = new Paperbunkr.App.Services.Reader.ReadingQueue(new[] { _issue1Id, _issue4Id }, "Read in order: Test");
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id, queue: queue); // 3 pages
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        vm.NextPageCommand.Execute(null);
+        vm.EndCardContinueCommand.Execute(null);
+
+        Assert.Contains("Other Series", vm.BreadcrumbSeries);
+        Assert.Equal("Read in order: Test · 2 of 2", vm.ContextStripLabel);
+    }
+
+    [Fact]
+    public void LoadIssue_WithoutAQueue_ClearsThePreviousQueue()
+    {
+        var queue = new Paperbunkr.App.Services.Reader.ReadingQueue(new[] { _issue1Id, _issue4Id }, "Queue");
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id, queue: queue);
+        Assert.True(vm.HasContextStrip);
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.False(vm.HasContextStrip);
     }
 
     [Fact]

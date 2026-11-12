@@ -44,6 +44,13 @@ public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
     private readonly Action<string> _goLibraryWithSearch;
     private readonly Action _goToDetailsTab;
     private readonly Action<int, IssueTagField, string, IssueTagWeight>? _reweightTag;
+    public Action<ComicMetadataEntityKind, string>? OpenEntity { get; set; }
+
+    /// <summary>Fills entity chips' images (the app sets <see cref="Services.EntityChipImages.FillAsync"/>; null in tests, so no database is read).</summary>
+    public Func<IReadOnlyList<TagPillViewModel>, System.Threading.Tasks.Task>? FillChipImages { get; set; }
+
+    /// <summary>The character, team, location and creator chips of the current band, so their images can be filled and refreshed together.</summary>
+    private readonly List<TagPillViewModel> _entityChips = new();
 
     /// <summary>Test-friendly default - most tests build this with no navigation/reweight wiring.</summary>
     public DetailBandViewModel(Action<string>? goLibraryWithSearch = null, Action? goToDetailsTab = null, Action<int, IssueTagField, string, IssueTagWeight>? reweightTag = null)
@@ -51,6 +58,8 @@ public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
         _goLibraryWithSearch = goLibraryWithSearch ?? (_ => { });
         _goToDetailsTab = goToDetailsTab ?? (() => { });
         _reweightTag = reweightTag;
+        // The band is kept alive while you visit a writer's or character's page, so an image that arrives there must reach these chips.
+        Services.EntityChipImages.Changed += () => _ = FillChipImages?.Invoke(_entityChips.ToList());
     }
 
     // --- Inline meta row ---
@@ -229,9 +238,10 @@ public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
         int? issueId)
     {
         Groups.Clear();
+        _entityChips.Clear();
 
-        var writerPills = writers.Select(PlainPill).ToList();
-        var artistPills = artists.Select(PlainPill).ToList();
+        var writerPills = writers.Select(v => EntityPill(ComicMetadataEntityKind.Creator, v)).ToList();
+        var artistPills = artists.Select(v => EntityPill(ComicMetadataEntityKind.Creator, v)).ToList();
         if (writerPills.Count > 0 || artistPills.Count > 0)
         {
             Groups.Add(new DetailBandGroupViewModel(writerPills, artistPills, _goToDetailsTab));
@@ -239,9 +249,9 @@ public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
 
         var tagList = genreTags.ToList();
         AddGroup("Genres & Concepts", TagPills(tagList, IssueTagField.Genre, issueId));
-        AddGroup("Teams", teams.Select(PlainPill).ToList());
-        AddGroup("Locations", locations.Select(PlainPill).ToList());
-        AddGroup("Characters", characters.Select(PlainPill).ToList());
+        AddGroup("Teams", teams.Select(v => EntityPill(ComicMetadataEntityKind.Team, v)).ToList());
+        AddGroup("Locations", locations.Select(v => EntityPill(ComicMetadataEntityKind.Location, v)).ToList());
+        AddGroup("Characters", characters.Select(v => EntityPill(ComicMetadataEntityKind.Character, v)).ToList());
 
         var (visibleTagPills, hiddenTagPills) = TagPillsSplitJunk(tagList, IssueTagField.Tags, issueId);
         if (visibleTagPills.Count > 0 || hiddenTagPills.Count > 0)
@@ -250,6 +260,7 @@ public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
         }
 
         OnPropertyChanged(nameof(HasGroups));
+        _ = FillChipImages?.Invoke(_entityChips.ToList());
     }
 
     private void AddGroup(string label, IReadOnlyList<TagPillViewModel> chips)
@@ -262,6 +273,17 @@ public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
 
     private TagPillViewModel PlainPill(string value) =>
         new(value, category: null, IssueTagWeight.Unset, _goLibraryWithSearch, reweight: null);
+
+    private TagPillViewModel EntityPill(ComicMetadataEntityKind kind, string value)
+    {
+        var chip = new TagPillViewModel(value, null, IssueTagWeight.Unset, name => { if (OpenEntity is { } open) open(kind, name); else _goLibraryWithSearch(name); }, null)
+        {
+            EntityKind = kind,
+            SearchLibrary = _goLibraryWithSearch,
+        };
+        _entityChips.Add(chip);
+        return chip;
+    }
 
     /// <summary>Dedup-by-value + highest-weight-wins, mirrors the old <c>DetailPillsViewModel.FillTagPills</c>.</summary>
     private List<TagPillViewModel> TagPills(IEnumerable<IssueTag> allTags, IssueTagField field, int? issueId)

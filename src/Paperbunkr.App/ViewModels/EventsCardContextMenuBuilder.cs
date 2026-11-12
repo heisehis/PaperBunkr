@@ -36,6 +36,8 @@ public sealed class EventsCardContextMenuBuilder
         {
             ContextMenuEntry.Item("Open", _vm.Events.SelectEventCommand, row, Symbol.Open),
             ContextMenuEntry.Item("Edit details", _vm.EditEventFromContextMenuCommand, row, Symbol.Edit),
+            ContextMenuEntry.Item("Smart fill / compare sources", new CommunityToolkit.Mvvm.Input.RelayCommand(() => _vm.Events.SmartFill.Open(row.Id)), icon: Symbol.ArrowClockwise),
+            ContextMenuEntry.Item("Smart fill selected events…", _vm.Events.SmartFill.OpenBatchCommand, icon: Symbol.ArrowClockwise),
         };
 
         entries.Add(ContextMenuEntry.Separator);

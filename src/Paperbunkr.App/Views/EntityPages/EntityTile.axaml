@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:ep="using:Paperbunkr.App.ViewModels.EntityPages"
+             x:Class="Paperbunkr.App.Views.EntityPages.EntityTile"
+             x:DataType="ep:EntityTileItem"
+             x:Name="ThisControl">
+    <!--
+        The one character / team / creator tile (docs/superpowers/specs/2026-11-12-entity-pages-redesign-design.md §5.1): portrait art at a fixed
+        size, a name row that always reserves two lines (so every tile in a strip is the same height), a caption. With no portrait it shows a
+        monogram with the first-appearance cover as a small inset. Right-click / Menu key goes to the host screen's IContextMenuProvider (the
+        DataContext is the EntityTileItem); there's no hover button on the art.
+    -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/EntityPageChrome.axaml" />
+    </UserControl.Styles>
+    <Button x:Name="Cell" Classes="entityCell" Command="{Binding #ThisControl.Command}"
+            AutomationProperties.Name="{Binding Name}" ToolTip.Tip="{Binding Name}">
+        <StackPanel Width="76" Spacing="4">
+            <Border x:Name="Art" Classes="entityArt tile">
+                <Panel>
+                    <Image views:AsyncEntityImage.Path="{Binding ImagePath}" Stretch="UniformToFill" IsVisible="{Binding HasImage}" />
+                    <TextBlock Classes="pbTextTitle entityMonogram" Text="{Binding Initials}" IsVisible="{Binding ShowMonogram}" />
+                    <Border Classes="entityInset" IsVisible="{Binding HasInsetCover}">
+                        <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                    </Border>
+                </Panel>
+            </Border>
+            <!-- Name (up to two lines) then caption, top-aligned. An invisible twin with a two-line name and a caption sets the block's height,
+                 so a one-line name leaves its spare line below the caption and every tile in a strip is the same height. -->
+            <Panel>
+                <StackPanel Spacing="4" Opacity="0" IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw">
+                    <TextBlock Classes="pbTextMeta" Text="M&#10;M" />
+                    <TextBlock Classes="pbTextCaption" Text="M" />
+                </StackPanel>
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="NameText" Classes="pbTextMeta" Text="{Binding Name}" MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Classes="pbTextCaption" Text="{Binding Caption}" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Panel>
+        </StackPanel>
+    </Button>
+</UserControl>

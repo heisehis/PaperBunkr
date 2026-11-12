@@ -1,0 +1,126 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:em="using:Paperbunkr.App.Controls.EventMap"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="600"
+             x:Class="Paperbunkr.App.Views.EventListView"
+             x:DataType="vm:EventMapViewModel">
+
+    <!-- The map's List view (docs/superpowers/specs/2026-11-11-continuity-list-atlas-views-design.md §1): a jump bar of sections with their
+         progress, then one virtualizing list of section headers and issue rows in exact reading order, with the section at the top pinned
+         over the list. Sections collapse; nothing here is one endless scroll. -->
+
+    <UserControl.Styles>
+        <Style Selector="ListBox#Rows ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="Border.listStripe">
+            <Setter Property="Width" Value="3" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+        <Style Selector="Border.nextUp">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+        <Style Selector="Grid#Root.narrow TextBlock.jumpLabel, Grid#Root.narrow Border.jumpCount">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Name="Root" ColumnDefinitions="Auto,*">
+        <!-- Jump bar -->
+        <Border Name="JumpBar" Grid.Column="0" Width="180" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                BorderThickness="0,0,1,0">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding JumpItems}" Margin="4,8" AutomationProperties.Name="Sections">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:EventListJumpItem">
+                            <Button Classes="sideItemButton" Classes.active="{Binding IsCurrent}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                    Command="{Binding $parent[UserControl].((vm:EventMapViewModel)DataContext).JumpToSectionCommand}" CommandParameter="{Binding}"
+                                    AutomationProperties.Name="{Binding Label}" ToolTip.Tip="{Binding Label}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Classes="sideItemLabel jumpLabel" Text="{Binding Label}" />
+                                    <Panel Grid.Column="1">
+                                        <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbSuccessBrush}"
+                                                       IsVisible="{Binding IsDone}" HorizontalAlignment="Center" />
+                                        <Border Classes="countPill jumpCount" IsVisible="{Binding !IsDone}">
+                                            <TextBlock Classes="pbTextCaption" Text="{Binding CountLabel}" />
+                                        </Border>
+                                    </Panel>
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Rows -->
+        <Panel Grid.Column="1">
+            <ListBox Name="Rows" ItemsSource="{Binding ListItems}" SelectionMode="Single" Background="{DynamicResource PbBgBrush}"
+                     AutomationProperties.Name="{Binding SurfaceAutomationName}">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.DataTemplates>
+                    <DataTemplate DataType="vm:EventListHeaderItem">
+                        <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1"
+                                Padding="12,8" AutomationProperties.Name="{Binding AutomationName}">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                                <Button Classes="iconButton sm" Command="{Binding ToggleCommand}" CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding AutomationName}" Focusable="False">
+                                    <fi:SymbolIcon Symbol="ChevronRight" Classes="chevronToggle" Classes.open="{Binding IsExpanded}" FontSize="{StaticResource PbIconSizeSm}" />
+                                </Button>
+                                <TextBlock Grid.Column="1" Classes="pbTextSection" Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <Border Grid.Column="2" Classes="countPill" VerticalAlignment="Center"><TextBlock Classes="pbTextCaption" Text="{Binding CountLabel}" /></Border>
+                                <Button Grid.Column="3" Classes="ghost sm" Content="Read this section" Command="{Binding ReadSectionCommand}" CommandParameter="{Binding}"
+                                        IsVisible="{Binding HasUnread}" Focusable="False" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:EventListIssueItem">
+                        <Grid ColumnDefinitions="Auto,Auto,*,Auto" Height="56" Background="Transparent" AutomationProperties.Name="{Binding Card.AutomationName}">
+                            <Border Classes="listStripe" Classes.nextUp="{Binding IsNextUp}" em:EventMapLaneBrush.ColorIndex="{Binding Card.ColorIndex}" Margin="0,4" />
+                            <Border Grid.Column="1" Width="32" Height="48" Margin="12,0,12,0" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
+                                    Background="{DynamicResource PbSurface2Brush}" VerticalAlignment="Center">
+                                <Image views:AsyncCoverImage.SourceId="{Binding Card.CoverKey}" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
+                                <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                                    <TextBlock Classes="pbTextBody" Text="{Binding Card.Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <Border Grid.Column="1" Classes="pbChip" VerticalAlignment="Center"><TextBlock Classes="pbTextCaption" Text="{Binding Card.RoleLabel}" /></Border>
+                                    <Border Grid.Column="2" Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Center" IsVisible="{Binding IsNextUp}">
+                                        <TextBlock Classes="pbTextCaption" Text="Next up" Foreground="{DynamicResource PbAccentTextBrush}" />
+                                    </Border>
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                    <TextBlock Classes="pbTextCaption" Text="{Binding Card.CoverDate}" IsVisible="{Binding Card.HasCoverDate}" />
+                                    <TextBlock Grid.Column="1" Classes="pbTextCaption" Text="{Binding TiesInto}" IsVisible="{Binding HasTiesInto}" TextTrimming="CharacterEllipsis" />
+                                </Grid>
+                            </StackPanel>
+                            <Panel Grid.Column="3" Width="16" Height="16" Margin="12,0,16,0" VerticalAlignment="Center">
+                                <Ellipse Width="8" Height="8" Stroke="{DynamicResource PbTextMutedBrush}" StrokeThickness="1.25" IsVisible="{Binding Card.IsUnread}" />
+                                <Ellipse Width="8" Height="8" Fill="{DynamicResource PbAccentBrush}" IsVisible="{Binding Card.IsInProgress}" />
+                                <fi:SymbolIcon Symbol="Checkmark" FontSize="12" Foreground="{DynamicResource PbSuccessBrush}" IsVisible="{Binding Card.IsRead}" />
+                            </Panel>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.DataTemplates>
+            </ListBox>
+
+            <!-- The section the top row belongs to, pinned over the list (the Library's PinnedGroupHeader pattern) -->
+            <Border Name="PinnedHeader" IsVisible="False" IsHitTestVisible="False" VerticalAlignment="Top" Padding="44,8,12,8"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Name="PinnedHeaderText" Classes="pbTextSection" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    <TextBlock Name="PinnedHeaderCount" Grid.Column="1" Classes="pbTextCaption" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+        </Panel>
+    </Grid>
+</UserControl>

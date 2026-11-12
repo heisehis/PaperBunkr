@@ -8,6 +8,76 @@ namespace Paperbunkr.App.Tests.EventMap;
 /// <summary>Covers <see cref="EventMapLayout.Compute"/> (docs/superpowers/specs/2026-09-25-event-map-design.md §1 "Layout").</summary>
 public class EventMapLayoutTests
 {
+    [Fact]
+    public void ShortLanesFoldLastAndKeepTheirOwnColorsWithoutCollisions()
+    {
+        var rows = Enumerable.Range(1, 8).Select(i => Row(i + 10, "1", i)).ToArray();
+        var layout = EventMapLayout.Compute(Source("No match", rows), SpineChoice.Relay, EventMapFilter.All,
+            EventMapDensity.Standard, relayPacked: true, foldShortLanes: true);
+        Assert.Single(layout.Tracks);
+        Assert.True(layout.Tracks[^1].IsFolded);
+        Assert.Equal(8, layout.ColumnCount);
+        Assert.True(layout.Cells.Select(c => c.ColorIndexOverride).Distinct().Count() > 1);
+        Assert.Equal(layout.Cells.Count, layout.Cells.Select(c => (c.Track, c.Column)).Distinct().Count());
+        var belowThreshold = EventMapLayout.Compute(Source("No match", rows.Take(7).ToArray()), SpineChoice.Relay,
+            EventMapFilter.All, EventMapDensity.Standard, relayPacked: true, foldShortLanes: true);
+        Assert.DoesNotContain(belowThreshold.Tracks, t => t.IsFolded);
+    }
+
+    [Fact]
+    public void FoldedSpineRetainsAnEdgeForEachSeriesInTheSegment()
+    {
+        var rows = new List<EventMapRow> { Row(Crisis, "1", 1) };
+        rows.AddRange(Enumerable.Range(0, 7).Select(i => Row(10 + i, "1", i + 2)));
+        var source = Source("Crisis", rows.ToArray());
+        var layout = EventMapLayout.Compute(source, SpineResolver.Resolve(source), EventMapFilter.All,
+            EventMapDensity.Standard, foldShortLanes: true);
+        Assert.True(layout.Tracks[0].IsTrunk);
+        Assert.True(layout.Tracks[^1].IsFolded);
+        Assert.Equal(7, layout.Edges.Count(e => e.Kind == EventMapEdgeKind.TieIn));
+        Assert.Equal(7, layout.Edges.Where(e => e.Kind == EventMapEdgeKind.TieIn).Select(e => layout.Cells[e.To].Row.SeriesId).Distinct().Count());
+    }
+
+    [Fact]
+    public void HideReadClosesGapsAndCanKeepTheSelectedIssueTemporarily()
+    {
+        var read = Row(SeriesA, "1", 1, read: EventMapReadState.Read);
+        var unread = Row(SeriesA, "2", 2);
+        var source = Source("No match", read, unread);
+        var filtered = EventMapLayout.Compute(source, SpineChoice.Relay, EventMapFilter.All, EventMapDensity.Standard, true, true);
+        Assert.Single(filtered.Cells);
+        Assert.Equal(unread.IssueId, filtered.Cells[0].Row.IssueId);
+        Assert.Equal(0, filtered.Cells[0].Column);
+        var held = EventMapLayout.Compute(source, SpineChoice.Relay, EventMapFilter.All, EventMapDensity.Standard, true, true, read.IssueId);
+        Assert.Equal(2, held.Cells.Count);
+    }
+
+    [Fact]
+    public void RelayPackingKeepsOrderAndStartsANewWaveOnRepeatedLane()
+    {
+        var source = Source("No match", RelaySampleRows());
+        var packed = EventMapLayout.Compute(source, SpineChoice.Relay, EventMapFilter.All, EventMapDensity.Standard, relayPacked: true);
+        Assert.Equal(new[] { 0, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4 }, packed.Cells.Select(c => c.Column));
+        Assert.Equal(new[] { "1", "2–3", "4–6", "7–9", "10–12" }, Enumerable.Range(0, packed.ColumnCount).Select(packed.ColumnLabel));
+        var strict = EventMapLayout.Compute(source, SpineChoice.Relay, EventMapFilter.All, EventMapDensity.Standard);
+        Assert.Equal(Enumerable.Range(0, 12), strict.Cells.Select(c => c.Column));
+    }
+
+    [Fact]
+    public void PackedChainUsesVerticalEdgesInEitherDirection()
+    {
+        var source = Source("No match", Row(SeriesA, "1", 1), Row(SeriesB, "1", 2), Row(SeriesA, "2", 3));
+        var layout = EventMapLayout.Compute(source, SpineChoice.Relay, EventMapFilter.All, EventMapDensity.Standard, relayPacked: true);
+        var down = layout.EdgePoints(layout.Edges[0]);
+        Assert.Equal(new Point(layout.CardRect(0).Center.X, layout.CardRect(0).Bottom), down[0]);
+        Assert.Equal(new Point(layout.CardRect(1).Center.X, layout.CardRect(1).Top), down[^1]);
+        var reverseSource = Source("No match", Row(SeriesA, "1", 1), Row(SeriesB, "1", 2), Row(SeriesB, "2", 3), Row(SeriesA, "2", 4));
+        var reverse = EventMapLayout.Compute(reverseSource, SpineChoice.Relay, EventMapFilter.All, EventMapDensity.Standard, relayPacked: true);
+        var up = reverse.EdgePoints(reverse.Edges[2]);
+        Assert.Equal(new Point(reverse.CardRect(2).Center.X, reverse.CardRect(2).Top), up[0]);
+        Assert.Equal(new Point(reverse.CardRect(3).Center.X, reverse.CardRect(3).Bottom), up[^1]);
+    }
+
     // ----- Spine mode -----
 
     [Fact]

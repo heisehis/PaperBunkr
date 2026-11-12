@@ -171,10 +171,10 @@ public class MetronClientTests
         Assert.Equal(new[] { new ComicVineIdName(7, "Captain America") }, details.Characters);
         Assert.Equal(new[] { new ComicVineIdName(8, "Avengers") }, details.Teams);
         Assert.Empty(details.Locations);                                          // Metron has no location data - confirmed, not "not yet mapped"
-        Assert.Contains(new ComicVineCredit("Ta-Nehisi Coates", "Writer", RoleExternalId: 1), details.Credits);
-        Assert.Contains(new ComicVineCredit("Leinil Yu", "Penciller", RoleExternalId: 2), details.Credits);
-        Assert.Contains(new ComicVineCredit("Leinil Yu", "Inker", RoleExternalId: 3), details.Credits);   // two roles, two fields
-        Assert.Contains(new ComicVineCredit("Someone", "Translator", RoleExternalId: 9), details.Credits); // RoleMap now covers Translator (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md)
+        Assert.Contains(new ComicVineCredit("Ta-Nehisi Coates", "Writer", CreatorExternalId: 1, RoleExternalId: 1), details.Credits);
+        Assert.Contains(new ComicVineCredit("Leinil Yu", "Penciller", CreatorExternalId: 2, RoleExternalId: 2), details.Credits);
+        Assert.Contains(new ComicVineCredit("Leinil Yu", "Inker", CreatorExternalId: 2, RoleExternalId: 3), details.Credits);
+        Assert.Contains(new ComicVineCredit("Someone", "Translator", CreatorExternalId: 3, RoleExternalId: 9), details.Credits);
         Assert.Contains("/issue/900/", handler.Requests[0].RequestUri!.OriginalString);
     }
 

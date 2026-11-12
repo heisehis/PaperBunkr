@@ -38,7 +38,9 @@ public static class NetworkProfileProbe
     public static string? WarningFor(IReadOnlyList<string> publicNetworks) => publicNetworks.Count == 0
         ? null
         : $"Windows treats {(publicNetworks.Count == 1 ? "this network" : "these networks")} as Public: {string.Join(", ", publicNetworks)}. " +
-          "Sharing here would let strangers on that network see your library's name and try your password. Switch it to Private in Windows network settings, or turn sharing off.";
+          "Windows Firewall blocks sharing on Public networks, so other computers won't be able to connect - and if it didn't, strangers on " +
+          "that network could see your library's name and try your password. If this is your home or office network, switch it to Private " +
+          "in Windows network settings.";
 
     public static async Task<IReadOnlyList<string>> GetPublicNetworksAsync(TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {

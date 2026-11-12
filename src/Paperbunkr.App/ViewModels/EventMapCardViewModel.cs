@@ -34,7 +34,7 @@ public sealed partial class EventMapCardViewModel : ObservableObject
         RoleLabel = EventMembershipRoleOption.FormatLabel(row.Role);
         IsTrunk = cell.IsTrunk;
         IsMissing = row.FileIsMissing;
-        ColorIndex = track.ColorIndex;
+        ColorIndex = cell.ColorIndexOverride ?? track.ColorIndex;
         Column = cell.Column;
         Track = cell.Track;
         OwnerEventId = row.OwnerEventId;
@@ -42,7 +42,48 @@ public sealed partial class EventMapCardViewModel : ObservableObject
         CbroOverlapNotes = row.OwnerEventCbroNotes ?? Array.Empty<string>();
         AlsoIn = row.AlsoIn ?? Array.Empty<EventMapEventRef>();
         IsOutsideContinuity = row.OutsideContinuity;
+        Ghost = row.Ghost;
         _readState = row.ReadState;
+    }
+
+    /// <summary>An issue from the event's provider list that isn't a member (continuity map M4); null for a real member.</summary>
+    public Paperbunkr.Data.Metadata.EventGhost? Ghost { get; }
+
+    public bool IsGhost => Ghost is not null;
+
+    /// <summary>A real member: it can be read, marked read and opened in its series.</summary>
+    public bool IsMember => Ghost is null;
+
+    /// <summary>The library owns it, but it isn't in this event ("In your library").</summary>
+    public bool IsOwnedGhost => Ghost?.Kind == Paperbunkr.Data.Metadata.EventGhostKind.OwnedNotMember;
+
+    /// <summary>The library has no copy ("Not in your library").</summary>
+    public bool IsMissingGhost => Ghost?.Kind == Paperbunkr.Data.Metadata.EventGhostKind.Missing;
+
+    public string GhostLabel => IsOwnedGhost ? "In your library" : "Not in your library";
+
+    /// <summary>"From Metron · checked 3 days ago".</summary>
+    public string GhostSourceLabel => Ghost is { } g ? $"From {g.Provider} · checked {Ago(g.FetchedAt)}" : string.Empty;
+
+    /// <summary>The issue's page on the provider, for "Open on Metron/ComicVine".</summary>
+    public string? GhostProviderUrl => Ghost is not { } g || g.ProviderIssueId is not { Length: > 0 } id ? null
+        : g.Provider == Paperbunkr.Data.Metadata.EventArcSnapshots.Metron ? $"https://metron.cloud/issue/{Uri.EscapeDataString(id)}/"
+        : $"https://comicvine.gamespot.com/issue/4000-{Uri.EscapeDataString(id)}/";
+
+    public string GhostProviderLabel => Ghost is { } g ? $"Open on {g.Provider}" : string.Empty;
+
+    /// <summary>The main character's or team's image (M5 §2); null when it has no real image.</summary>
+    [ObservableProperty]
+    private string? _facePath;
+
+    /// <summary>Set after Add to Wanted, so the inspector shows "Wanted" instead of the button.</summary>
+    [ObservableProperty]
+    private bool _isWanted;
+
+    private static string Ago(DateTime utc)
+    {
+        int days = (int)Math.Floor((DateTime.UtcNow - utc).TotalDays);
+        return days <= 0 ? "today" : days == 1 ? "yesterday" : $"{days} days ago";
     }
 
     /// <summary>Continuity map: the event whose block this card sits in; null for an issue in no event (or on an event map).</summary>
@@ -128,7 +169,9 @@ public sealed partial class EventMapCardViewModel : ObservableObject
     public string MarkReadLabel => IsRead ? "Mark unread" : "Mark read";
 
     /// <summary>"Adventure #2, Tie In, unread" - read state is never conveyed by colour alone (spec §3).</summary>
-    public string AutomationName => $"{Title}, {RoleLabel}, {ReadStateLabel.ToLowerInvariant()}{(IsMissing ? ", file missing" : string.Empty)}";
+    public string AutomationName => IsGhost
+        ? $"{Title}, {GhostLabel.ToLowerInvariant()}"
+        : $"{Title}, {RoleLabel}, {ReadStateLabel.ToLowerInvariant()}{(IsMissing ? ", file missing" : string.Empty)}";
 
     public string ToolTipText => $"{Title}\n{RoleLabel} · {ReadStateLabel}{(HasCoverDate ? " · " + CoverDate : string.Empty)}{(IsMissing ? "\nFile missing" : string.Empty)}";
 
@@ -172,7 +215,7 @@ public sealed partial class EventMapCardViewModel : ObservableObject
 
 /// <summary>A lane header: colour bar, name (trimmed with a tooltip) and issue count (spec §3 "Lane headers").</summary>
 public sealed record EventMapLaneHeader(string Label, string FullName, int Count, int ColorIndex, bool IsTrunk, double Height, bool IsOutside = false,
-    string? ContinuesAs = null)
+    string? ContinuesAs = null, string? RelationLabel = null)
 {
     public string CountLabel => (Count == 1 ? "1 issue" : $"{Count} issues")
                                 + (IsOutside ? " · outside this continuity" : string.Empty)

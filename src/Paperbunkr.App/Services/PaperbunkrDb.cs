@@ -55,7 +55,7 @@ public static class PaperbunkrDb
         using var context = CreateContext();
         context.Database.Migrate();
         SeedSystemSmartLists(context);
-        BackfillCharacterIndex(context);
+        // The versioned four-index rebuild runs off the startup path in ScheduledTaskCatalog.
         Paperbunkr.Data.Acquisition.TemplateUpgrade.Run(context);   // one-time: acquisition rename template -> shared template grammar
         Paperbunkr.Data.ReadingLists.ReadingListTagReconciler.ReconcileAll(CreateContext);
 
@@ -68,22 +68,6 @@ public static class PaperbunkrDb
         // to INSERT Id=1, and the loser throws "UNIQUE constraint failed: AppSettings.Id". Once this
         // row exists, every later GetOrCreateAppSettings() call is a plain SELECT, which is race-free.
         context.GetOrCreateAppSettings();
-    }
-
-    /// <summary>
-    /// One-time backfill of the derived <c>Character</c> index over existing <c>Issue.Characters</c>
-    /// text (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-progression-design.md).
-    /// Guarded on "no Character rows yet" so a normal launch does no work; a library that genuinely
-    /// has no character metadata just re-checks a cheap <c>Any()</c> each time.
-    /// </summary>
-    private static void BackfillCharacterIndex(PaperbunkrDbContext context)
-    {
-        if (context.Characters.Any())
-        {
-            return;
-        }
-
-        Paperbunkr.Data.Metadata.CharacterResolver.RebuildAll(context);
     }
 
     /// <summary>

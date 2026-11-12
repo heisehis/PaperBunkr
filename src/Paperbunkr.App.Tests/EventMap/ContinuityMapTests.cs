@@ -11,6 +11,24 @@ namespace Paperbunkr.App.Tests.EventMap;
 /// </summary>
 public class ContinuityMapTests
 {
+    [Fact]
+    public void EventBlocksPackByLaneAndHideReadRemovesCards()
+    {
+        var a = Row(1, Hulk, "1", 2020) with { Position = 1, ReadState = EventMapReadState.Read };
+        var b = Row(2, Thor, "1", 2020) with { Position = 2 };
+        var c = Row(3, Hulk, "2", 2020) with { Position = 3 };
+        var data = new ContinuityMapData(1, "Test", new[] { new ContinuityLane(Hulk, "Hulk", false), new ContinuityLane(Thor, "Thor", false) },
+            new[] { new ContinuityEventData(4, "Event", 202001, 202012, new[] { a, b, c }) }, Array.Empty<ContinuityRelationData>(),
+            Array.Empty<EventMapRow>(), new Dictionary<int, IReadOnlyList<EventMapEventRef>>(), 0);
+        var source = Build(data);
+        var packed = EventMapLayout.ComputeBlocks(source, EventMapDensity.Standard, relayPacked: true);
+        Assert.Equal(new[] { 0, 0, 1 }, packed.Cells.Select(cell => cell.Column));
+        Assert.Equal("1–2", packed.ColumnLabel(0));
+        var filtered = Build(data, new ContinuityMapOptions(new HashSet<int>(), false, false, HideRead: true));
+        Assert.DoesNotContain(filtered.Rows, row => row.IssueId == 1);
+        Assert.Equal(2, filtered.Rows.Count);
+    }
+
     private const int Hulk = 1, Thor = 2, Aftersmash = 9;
     private const int PlanetHulk = 100, WorldWarHulk = 200;
 

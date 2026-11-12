@@ -135,9 +135,9 @@ public class AddBookMetadataFoundationMigrationTests : IDisposable
     {
         using (var context = CreateContext())
         {
-            // Exercise this migration's Down/Up pair, not later migrations whose deliberate orphan
-            // columns make rolling the entire current schema backwards unsupported. The current EF
-            // settings model also contains later columns, so inspect this schema's defaults directly.
+            // Exercise this migration's own Down/Up pair (the full-chain rollback is covered by
+            // Down_RestoresLegacyFinishedFromStatus). The current EF settings model also contains
+            // later columns, so inspect this schema's defaults directly.
             context.GetService<IMigrator>().Migrate(ThisMigration);
             string ColumnDefault(string name) => context.Database.SqlQueryRaw<string>(
                 "SELECT dflt_value AS Value FROM pragma_table_info('AppSettings') WHERE name = {0}", name).Single();
@@ -159,6 +159,62 @@ public class AddBookMetadataFoundationMigrationTests : IDisposable
         {
             context.GetService<IMigrator>().Migrate(ThisMigration);
             Assert.Equal(0, context.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM BookTags").Single());
+        }
+    }
+
+    /// <summary>
+    /// Down must not read the orphan <c>Books.Finished</c> column. Rolling back from this migration alone, the orphan is
+    /// still there. Rolling back from the latest migration, a later Down's Books rebuild (from a snapshot without the
+    /// orphan) has already dropped it. Both used to differ: the second failed with 'no such column: "Finished"'
+    /// and broke every test that rolls the whole chain back. In both cases Finished comes back from Status.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Down_RestoresLegacyFinishedFromStatus(bool fromLatest)
+    {
+        using (var context = CreateContext())
+        {
+            if (fromLatest) context.Database.Migrate();
+            else context.GetService<IMigrator>().Migrate(ThisMigration);
+
+            var orphanPresent = context.Database
+                .SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_table_info('Books') WHERE name = 'Finished'").Single();
+            Assert.Equal(1, orphanPresent);
+
+            // Stale legacy value on purpose: Status is the source of truth after Up.
+            var insert = "INSERT INTO Books (Title, Format, FilePath, AddedTime, Finished, Status, LastChapterIndex, ChapterCount) " +
+                         "VALUES ({0}, 'Epub', {1}, '2024-01-01 00:00:00', 0, {2}, 0, 0);";
+            context.Database.ExecuteSqlRaw(insert, "done", @"C:\done.epub", "Finished");
+            context.Database.ExecuteSqlRaw(insert, "reading", @"C:\reading.epub", "Reading");
+            context.Database.ExecuteSqlRaw(insert, "unread", @"C:\unread.epub", "Unread");
+        }
+
+        using (var context = CreateContext())
+        {
+            context.GetService<IMigrator>().Migrate(PriorMigration);
+
+            var columns = context.Database
+                .SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('Books')").ToList();
+            Assert.Contains("Finished", columns);
+            Assert.DoesNotContain("Status", columns);
+
+            int FinishedOf(string title) => context.Database
+                .SqlQueryRaw<int>("SELECT Finished AS Value FROM Books WHERE Title = {0}", title).Single();
+            Assert.Equal(1, FinishedOf("done"));
+            Assert.Equal(0, FinishedOf("reading"));
+            Assert.Equal(0, FinishedOf("unread"));
+            Assert.Equal("integer", context.Database
+                .SqlQueryRaw<string>("SELECT typeof(Finished) AS Value FROM Books WHERE Title = 'done'").Single());
+        }
+
+        using (var context = CreateContext())
+        {
+            // And forward again: Up's Status data step reads the restored column.
+            context.GetService<IMigrator>().Migrate(ThisMigration);
+            var status = context.Database
+                .SqlQueryRaw<string>("SELECT Status AS Value FROM Books WHERE Title = 'done'").Single();
+            Assert.Equal("Finished", status);
         }
     }
 }

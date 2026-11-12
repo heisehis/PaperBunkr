@@ -215,6 +215,17 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         _themeService.ScheduledThemeCrossfadeRequested += OnScheduledThemeCrossfadeRequested;
         _themeService.MatrixRainEnabledChanged += OnMatrixRainEnabledChanged;
         OnThemeAppliedForMatrixRain(); // initialize from whatever ApplyPersistedSettings already applied at startup, before this subscription existed
+        if (ThemeService.TakePendingThemeNotice() is { } themeNotice)
+        {
+            // A retired theme was replaced at startup (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md "Migration"): say so once.
+            Activity.RaiseAlert(new ActivityAlert
+            {
+                Severity = ActivityAlertSeverity.Info,
+                Title = "Your theme changed",
+                Detail = themeNotice,
+                DedupeKey = "theme-retired",
+            });
+        }
         OnMatrixRainEnabledChanged();
         Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection, themeService, loadOnConstruction: false,
             toastHost: new DispatcherToastHost(ShowToast, CloseToast), goInsights: GoInsights, goPreferencesAnchor: GoPreferencesAnchor, goBookDetail: GoBookDetailForBook);
@@ -325,10 +336,23 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         {
             GoToReaderInEvent = GoReaderForIssueInStoryEvent,
             ReaderIssueId = () => Reader.LoadedIssue?.Id,
+            Dialogs = Dialogs,
         };
+        Events.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is nameof(ContinuityScreenViewModel.IsMapMaximized) or nameof(ContinuityScreenViewModel.ShowEventMap))
+            {
+                OnPropertyChanged(nameof(IsChromeSuppressed));
+                OnPropertyChanged(nameof(ShowAppChrome));
+                OnPropertyChanged(nameof(ShowContextualSidebar));
+            }
+        };
+        Events.SmartFill.ContinueSetup = id => { Events.LoadEvent(id); ResumeEventSetup(); };
+        WireSeriesStructure();
         Insights = new InsightsScreenViewModel(GoReaderForIssue, GoDetailForSeries, GoLibraryWithSearch, OpenNewGoalDialog, Dialogs, ReadingEvents, activity: Activity,
             goReaderForBook: GoBookReaderForBook, goBookDetailForBook: GoBookDetailForBook,
             preferences: new InsightsPreferences(InsightsPreferences.DefaultPath()), openDuplicateReview: OpenDuplicateReview);
+        Insights.Stats.GoCreator = name => GoMetadataEntityByName(ComicMetadataEntityKind.Creator, name);
         Plugin = new PluginScreenViewModel(new FilePickerService(), Dialogs);
         // The review queues (docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md) - owned here,
         // hosted by Preferences → Library → Library Health; the migration overlay only gets it to refresh after a run.
@@ -360,7 +384,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             GoReadingCommand.Execute(null);
             await Reading.OpenImportReviewAsync(input, Reading.IsListMode ? Reading.List.FolderId : Reading.Gallery.CurrentFolderId);
         };
-        NewEventOrContinuity = new NewEventOrContinuityViewModel(OnEventOrContinuityCreated, CloseNewEventDialog);
+        NewEventOrContinuity = new NewEventOrContinuityViewModel(OnEventOrContinuityCreated, CloseNewEventDialog, Activity);
         GoalEditor = new GoalEditorViewModel(OnGoalCreated, CloseNewGoalDialog);
         Insights.Goals.RenewRequested = OpenRenewGoalDialog;
         // "Set a goal…" on a reading list / collection: the same overlay, as a Finish goal for that list or collection
@@ -1049,6 +1073,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     partial void OnCurrentScreenChanging(string? oldValue, string newValue)
     {
+        if (oldValue == "events" && newValue != "events") Events?.LeaveScreen();
         if (oldValue == "reader" && newValue != "reader")
         {
             // Guided view keeps a panel-detection model in native memory; free it once the Reader is left
@@ -1175,6 +1200,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// </summary>
     public bool IsInReader => IsReader || IsBookReader || IsPdfReader || IsCompare;
 
+    public bool IsChromeSuppressed => IsEvents && Events is { IsMapMaximized: true, ShowEventMap: true };
+
+    public bool ShowAppChrome => !IsInReader && !IsChromeSuppressed;
+
     /// <summary>Alias, not a distinct concept - kept so <see cref="Escape"/>/<see cref="TryLeaveCurrentEditor"/>
     /// didn't need renaming when this stopped being <see cref="CurrentScreen"/>-backed.</summary>
     public bool IsIssueProperties => IsIssuePropertiesOverlayOpen;
@@ -1193,7 +1222,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     // Reading Lists has no shared sidebar since its redesign: the gallery is the home and a list has its own cover rail
     // (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md §1, decision Q20).
-    public bool ShowContextualSidebar => IsLibrary || IsSmart || IsEvents;
+    public bool ShowContextualSidebar => (IsLibrary || IsSmart || IsEvents) && !IsChromeSuppressed;
 
     /// <summary>
     /// Drives <c>MatrixRainOverlay</c>'s <c>IsVisible</c> binding in MainWindow.axaml (docs/
@@ -1279,7 +1308,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     }
 
     private void OnThemeAppliedForMatrixRain() =>
-        IsMatrixThemeActive = string.Equals(_themeService.GetActiveThemeKey(), "matrix", StringComparison.OrdinalIgnoreCase);
+        IsMatrixThemeActive = ThemeService.IsMatrixRainTheme(_themeService.GetActiveThemeKey());
 
     private bool _trueBlackSuspended;
 
@@ -1320,6 +1349,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(IsBookReader));
         OnPropertyChanged(nameof(IsPdfReader));
         OnPropertyChanged(nameof(IsInReader));
+        if (!IsEvents && Events is not null) Events.IsMapMaximized = false;
+        OnPropertyChanged(nameof(IsChromeSuppressed));
+        OnPropertyChanged(nameof(ShowAppChrome));
         OnPropertyChanged(nameof(IsMatrixRainVisible));
         OnPropertyChanged(nameof(IsDetail));
         OnPropertyChanged(nameof(IsMangaDetail));
@@ -1816,7 +1848,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         || IsReadingListPropertiesOverlayOpen || IsCollectionPropertiesOverlayOpen || IsWorkspaceNameOverlayOpen
         || IsNewReadingListDialogOpen || IsNewEventDialogOpen || IsNewGoalDialogOpen || IsListOptionsOverlayOpen || IsDetailListOptionsOverlayOpen || IsEditLayoutsOverlayOpen || IsMigrationOverlayOpen || IsQuickRateOverlayOpen
         || IsPasteDataOverlayOpen || IsMergeSeriesOverlayOpen
-        || IsWelcomeOverlayOpen || IsWelcomeTourOverlayOpen || IsWhatsNewOverlayOpen;
+        || IsWelcomeOverlayOpen || IsWelcomeTourOverlayOpen || IsWhatsNewOverlayOpen || Events.SmartFill.IsOpen;
 
     /// <summary>Ctrl+P (docs/superpowers/specs/2026-09-03-quick-open-command-palette-design.md) - opens
     /// the command palette. No-op while an editor overlay is up, or if it's already open. The
@@ -2538,7 +2570,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// context isn't part of <see cref="NavigationEntry"/>) - an acceptable simplification, low-risk
     /// since it only affects Reader's own "up/down next in list" affordance while paging back through
     /// history, not the page content itself.</summary>
-    private void NavigateToReaderCore(int issueId, int? readingListId, int? startPage = null, int? storyEventId = null)
+    private void NavigateToReaderCore(int issueId, int? readingListId, int? startPage = null, int? storyEventId = null, Services.Reader.ReadingQueue? queue = null)
     {
         _currentReaderIssueId = issueId;
         Detail.SetReadingIssueId(issueId);
@@ -2548,7 +2580,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         }
         else
         {
-            Reader.LoadIssue(issueId, startPage: startPage, storyEventId: storyEventId);
+            Reader.LoadIssue(issueId, startPage: startPage, storyEventId: storyEventId, queue: queue);
         }
 
         CurrentScreen = "reader";
@@ -2633,15 +2665,17 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Character/Team/Location/Creator/Publisher entry point (docs/superpowers/specs/2026-09-
     /// 23-metron-api-utilization-design.md) - one shared screen/history entry for all five kinds, see
     /// <see cref="MetadataEntityDetailScreenViewModel"/>'s own doc comment for why.</summary>
-    private void GoMetadataEntityDetail(ComicMetadataEntityKind kind, int entityId) => RunDrill(DrillTransitionKind.Push, sharedKey: null, () =>
+    private void GoMetadataEntityDetail(ComicMetadataEntityKind kind, int entityId, int? continuityId = null) => RunDrill(DrillTransitionKind.Push, sharedKey: null, () =>
     {
-        NavigateToMetadataEntityDetailCore(kind, entityId);
-        PushHistory(new NavigationEntry("metadataEntity", ToNavigationEntryKind(kind), entityId, MetadataEntityDetail.Name));
+        NavigateToMetadataEntityDetailCore(kind, entityId, continuityId);
+        using var context = PaperbunkrDb.CreateContext();
+        string label = Paperbunkr.Data.Metadata.EntityNameLookup.Name(context, kind, entityId) ?? kind.ToString();
+        PushHistory(new NavigationEntry("metadataEntity", ToNavigationEntryKind(kind), entityId, label, continuityId));
     });
 
-    private void NavigateToMetadataEntityDetailCore(ComicMetadataEntityKind kind, int entityId)
+    private void NavigateToMetadataEntityDetailCore(ComicMetadataEntityKind kind, int entityId, int? continuityId = null)
     {
-        MetadataEntityDetail.Load(kind, entityId);
+        MetadataEntityDetail.Load(kind, entityId, continuityId);
         CurrentScreen = "metadataEntity";
     }
 
@@ -3172,7 +3206,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 NavigateToBookReaderCore(entry.EntityId, BookFormat.Pdf, startAt: null);
                 break;
             case "metadataEntity":
-                NavigateToMetadataEntityDetailCore(ToComicMetadataEntityKind(entry.Kind), entry.EntityId);
+                NavigateToMetadataEntityDetailCore(ToComicMetadataEntityKind(entry.Kind), entry.EntityId, entry.SecondaryEntityId);
                 break;
         }
     }
@@ -3529,6 +3563,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void Escape()
     {
+        if (Events.SmartFill.IsOpen) { Events.SmartFill.CloseCommand.Execute(null); return; }
+        if (IsNewEventDialogOpen && NewEventOrContinuity.DraftSources.IsOpen) { NewEventOrContinuity.DraftSources.CloseCommand.Execute(null); return; }
         if (ActivityCenter.IsOpen)
         {
             ActivityCenter.CloseCommand.Execute(null);

@@ -116,6 +116,20 @@ public partial class MainWindow : Window
         // root forward to it, so a shortcut fires whatever has focus, and the shell-wide actions it resolves (Escape, back/forward, quick open, ...) are handled in
         // OnGlobalInputAction below. This replaced a hardcoded key chain here and a separate horizontal-swipe wheel handler.
         _input = InputServiceLocator.Current;
+
+        // Ahead of the input service: while a dialog is open and focus has slipped outside it, a navigation key puts focus back into the dialog
+        // instead of acting on the page behind or starting over from the nav rail (2026-11-12 focus audit). Also records whether the last press
+        // was a key, so a dialog opened from the keyboard shows its focus ring at once.
+        AddHandler(KeyDownEvent, (_, e) =>
+        {
+            OverlayShell.LastInputWasKeyboard = true;
+            if (!e.Handled && OverlayShell.TryRedirectKey(this, e.Key, e.KeyModifiers))
+            {
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
+        AddHandler(PointerPressedEvent, (_, _) => OverlayShell.LastInputWasKeyboard = false, RoutingStrategies.Tunnel, handledEventsToo: true);
+
         _inputHost = InputHost.Attach(this, _input);
         _globalInput = _input.Register(InputScope.Global, OnGlobalInputAction);
 
@@ -443,6 +457,12 @@ public partial class MainWindow : Window
     {
         if (e.Handled || e.KeyModifiers != KeyModifiers.None || e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down or Key.Home or Key.End)
             || e.Source is not Visual source || !NavRail.IsEffectivelyVisible || NavRail.Bounds.Width <= 0)
+        {
+            return;
+        }
+
+        // A dialog is modal: its arrow keys never reach the rail behind it.
+        if (OverlayShell.TopmostOpen(this) is not null)
         {
             return;
         }

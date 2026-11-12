@@ -1,0 +1,15 @@
+{
+  "layout": "clip",
+  "brand": "paperbunkr",
+  "kicker": "BUILD LOG",
+  "title": "Guided view, panel by panel.",
+  "clip": {
+    "src": "C:/Users/DeeDee/Videos/Paperbunkr Clips/C3 - take 2.mp4",
+    "start": 11,
+    "duration": 9,
+    "crop": "1366:698:0:22",
+    "fps": 12,
+    "width": 960
+  },
+  "out": "social/media/2026-11-04-guided-view"
+}

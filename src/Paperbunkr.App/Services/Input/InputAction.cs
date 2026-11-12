@@ -128,6 +128,9 @@ public static class InputActionIds
     // --- Reader: fullscreen -------------------------------------------------------------------------------------------------------------------
 
     public const string ToggleFullscreen = "Reader.ToggleFullscreen";
+    public const string ContinuityToggleMapMaximize = "Continuity.ToggleMapMaximize";
+    public const string ContinuityMapZoomIn = "Continuity.MapZoomIn";
+    public const string ContinuityMapZoomOut = "Continuity.MapZoomOut";
 
     // --- Reader: analogue axes (gamepad sticks and triggers; delivered with a continuous Value, see InputActionKind.Axis) -----------------------
 

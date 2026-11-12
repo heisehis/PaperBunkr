@@ -108,7 +108,17 @@ public sealed class ShareServer : IAsyncDisposable
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
             kestrel.AddServerHeader = false;
-            kestrel.Listen(_options.BindAddress, _options.Port, listen => listen.UseHttps(_certificate));
+            if (_options.BindAddress.Equals(IPAddress.Any) || _options.BindAddress.Equals(IPAddress.IPv6Any))
+            {
+                // Every address, IPv4 and IPv6: Kestrel opens one dual-mode IPv6 socket and falls back to IPv4 where IPv6 is off.
+                // IPv4-only binding refused anyone who reached the host by an IPv6 address (or a name that resolved to one).
+                // IPv4 clients arrive as IPv4-mapped IPv6; PrivateNetwork and ClientKey already unmap them.
+                kestrel.ListenAnyIP(_options.Port, listen => listen.UseHttps(_certificate));
+            }
+            else
+            {
+                kestrel.Listen(_options.BindAddress, _options.Port, listen => listen.UseHttps(_certificate));
+            }
         });
 
         WebApplication app = builder.Build();

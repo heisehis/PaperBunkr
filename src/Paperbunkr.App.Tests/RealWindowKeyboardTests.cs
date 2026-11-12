@@ -23,6 +23,105 @@ namespace Paperbunkr.App.Tests;
 public class RealWindowKeyboardTests : IDisposable
 {
     [Fact]
+    public void EventMap_F11AndArrowsWorkInTheRealWindow()
+    {
+        int eventId;
+        using (var db = PaperbunkrDb.CreateContext())
+        {
+            var series = new Series { Name = "Map keyboard series" };
+            var storyEvent = new StoryEvent { Name = "Map keyboard event" };
+            db.AddRange(series, storyEvent);
+            for (int i = 1; i <= 3; i++)
+            {
+                var issue = new Issue { Series = series, Number = i.ToString(), FilePath = $"map-{i}.cbz" };
+                db.Add(new EventMembership { StoryEvent = storyEvent, Issue = issue, Position = i });
+            }
+            db.SaveChanges();
+            eventId = storyEvent.Id;
+        }
+        PinnedThread.Run(() =>
+        {
+            Theming.FoundationStyleTests.WithFoundation("default", () =>
+            {
+                using var styles = AppStyles(); using var tokens = AppResources();
+                var previous = InputServiceLocator.Current;
+                InputServiceLocator.Current = new InputService(InputActionCatalog.CreateWithCoreActions(), new MemoryKeymapStore());
+                try
+                {
+                    var vm = new MainViewModel();
+                    vm.Events.MapBackgroundRunner = work => Task.FromResult(work());
+                    var window = new MainWindow { DataContext = vm, Width = 1366, Height = 768 };
+                    window.Show();
+                    vm.GoEventsCommand.Execute(null);
+                    vm.Events.LoadEvent(eventId);
+                    vm.Events.DetailView = EventsDetailView.Map;
+                    vm.Events.MapLoadTask.GetAwaiter().GetResult();
+                    RunLayout(window); TestDispatcher.Drain(); RunLayout(window);
+                    var canvas = window.GetVisualDescendants().OfType<Paperbunkr.App.Controls.EventMap.EventMapCanvas>().First(c => c.IsEffectivelyVisible);
+                    SaveMapRender(window, "real-window-regular.png");
+                    canvas.Focus(NavigationMethod.Directional);
+                    Press(window, Key.F11);
+                    Assert.True(vm.Events.IsMapMaximized);
+                    Assert.False(vm.ShowAppChrome);
+                    RunLayout(window);
+                    SaveMapRender(window, "real-window-maximized.png");
+                    vm.Events.Map.Select(0, reveal: false);
+                    Press(window, Key.Right);
+                    Assert.Equal(1, vm.Events.Map.SelectedIndex);
+                    Assert.Same(canvas, window.FocusManager!.GetFocusedElement());
+                    vm.Events.DetailView = EventsDetailView.Primary;
+                    Assert.True(vm.ShowAppChrome);
+                    vm.GoLibraryCommand.Execute(null);
+                    Assert.False(vm.Events.IsMapMaximized);
+                    Press(window, Key.F11);
+                    Assert.False(vm.Events.IsMapMaximized);
+                    window.Close();
+                }
+                finally { InputServiceLocator.Current = previous; }
+            });
+            return 0;
+        });
+    }
+
+    private static void SaveMapRender(Window window, string name)
+    {
+        string? output = Environment.GetEnvironmentVariable("PB_RENDER_OUT");
+        if (string.IsNullOrEmpty(output)) return;
+        Directory.CreateDirectory(output);
+        using var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize(1366, 768));
+        bitmap.Render(window);
+        bitmap.Save(Path.Combine(output, name));
+    }
+
+    [Fact]
+    public void EventSmartFill_EscapeClosesOverlayInTheRealWindow()
+    {
+        PinnedThread.Run(() =>
+        {
+            Theming.FoundationStyleTests.WithFoundation("default", () =>
+            {
+                using var styles = AppStyles(); using var tokens = AppResources();
+                var previous = InputServiceLocator.Current;
+                InputServiceLocator.Current = new InputService(InputActionCatalog.CreateWithCoreActions(), new MemoryKeymapStore());
+                try
+                {
+                    var vm = new MainViewModel(); var window = new MainWindow { DataContext = vm, Width = 1366, Height = 768 };
+                    window.Show(); vm.GoEventsCommand.Execute(null);
+                    vm.Events.SmartFill.Title = "Smart fill keyboard check"; vm.Events.SmartFill.IsOpen = true;
+                    RunLayout(window); TestDispatcher.Drain(); RunLayout(window);
+                    var view = window.GetVisualDescendants().OfType<EventSmartFillOverlay>().First(v => v.IsEffectivelyVisible);
+                    var buttons = view.GetVisualDescendants().OfType<Button>().ToArray();
+                    var close = buttons.FirstOrDefault(b => b.Command == vm.Events.SmartFill.CloseCommand);
+                    Assert.True(close is not null, $"Overlay context={view.DataContext?.GetType().Name}; same={ReferenceEquals(view.DataContext,vm.Events.SmartFill)}; buttons={string.Join(";",buttons.Select(b => $"{b.Content}:{b.Command?.GetType().Name}"))}");
+                    close!.Focus(NavigationMethod.Tab); Press(window, Key.Escape); TestDispatcher.Drain(); RunLayout(window);
+                    Assert.False(vm.Events.SmartFill.IsOpen); window.Close();
+                }
+                finally { InputServiceLocator.Current = previous; }
+            });
+            return 0;
+        });
+    }
+    [Fact]
     public async Task ReadingListReview_SearchAndCandidateArrowsWorkInTheRealWindow()
     {
         int listId;

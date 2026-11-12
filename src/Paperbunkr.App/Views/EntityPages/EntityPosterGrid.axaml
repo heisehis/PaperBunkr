@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:ep="using:Paperbunkr.App.ViewModels.EntityPages"
+             x:Class="Paperbunkr.App.Views.EntityPages.EntityPosterGrid"
+             x:Name="ThisControl">
+    <!-- The entity pages' cover grid (redesign §5.2): issues on Appearances / Credits, series posters with read progress on Series. A plain
+         ItemsControl with the virtualizing wrap panel and no ScrollViewer of its own: the panel virtualizes against the page's one scroller
+         through EffectiveViewportChanged, so a 1,000-issue character only realizes what's on screen. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/EntityPageChrome.axaml" />
+    </UserControl.Styles>
+    <ItemsControl x:Name="Grid" ItemsSource="{Binding #ThisControl.Items}" AutomationProperties.Name="{Binding #ThisControl.Label}">
+        <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+                <controls:VirtualizingWrapPanel ItemWidth="104" ItemHeight="216" ItemSpacing="12" LineSpacing="12" PrefetchDecodeWidth="96" />
+            </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="ep:EntityPosterItem">
+                <Button Classes="entityCell" Command="{Binding OpenCommand}" AutomationProperties.Name="{Binding Title}" ToolTip.Tip="{Binding Title}">
+                    <StackPanel Width="96" Spacing="4" Margin="0,4,0,0">
+                        <Border Classes="entityArt poster">
+                            <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                        </Border>
+                        <Border Classes="entityProgressTrack" IsVisible="{Binding HasProgress}" ToolTip.Tip="{Binding Caption}">
+                            <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent}" MinHeight="0" Height="4" Background="Transparent"
+                                         Foreground="{DynamicResource PbAccentBrush}" />
+                        </Border>
+                        <Panel>
+                            <StackPanel Spacing="4" Opacity="0" IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw">
+                                <TextBlock Classes="pbTextMeta" Text="M&#10;M" />
+                                <TextBlock Classes="pbTextCaption" Text="M" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock Classes="pbTextMeta" Text="{Binding Title}" MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Classes="pbTextCaption" Text="{Binding Caption}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Panel>
+                    </StackPanel>
+                </Button>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>

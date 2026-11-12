@@ -104,6 +104,12 @@ public static class UiNavigation
             return FocusFirst(top);
         }
 
+        // An open dialog is modal: with focus left behind on the page, the first move goes into the dialog.
+        if (Controls.OverlayShell.TopmostOpen(top) is { } dialog && !Controls.OverlayShell.IsInsideAnyOpen(top, focused))
+        {
+            return dialog.FocusInitial(NavigationMethod.Directional);
+        }
+
         if (focused is not TextBox)
         {
             var key = direction switch
@@ -132,6 +138,12 @@ public static class UiNavigation
     /// <summary>Puts focus on the first focusable element (what a D-pad press does before anything has focus).</summary>
     public static bool FocusFirst(TopLevel top)
     {
+        // With a dialog open, "the first element" is the dialog's, not the nav rail's.
+        if (Controls.OverlayShell.TopmostOpen(top) is { } dialog)
+        {
+            return dialog.FocusInitial(NavigationMethod.Directional);
+        }
+
         if (top.FocusManager?.FindNextElement(NavigationDirection.Next) is Control first)
         {
             first.Focus(NavigationMethod.Directional);

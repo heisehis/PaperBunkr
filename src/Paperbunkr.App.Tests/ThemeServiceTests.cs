@@ -94,16 +94,17 @@ public class ThemeServiceTests : IDisposable
 
         var themes = service.GetAvailableThemes();
 
-        // Ten version 1 built-ins (one look each) plus the ten v2 families, which list one entry per variant: 18 between them.
-        Assert.Equal(10, themes.Count(t => t.IsLegacy));
-        Assert.Equal(28, themes.Count);
-        Assert.Equal(20, themes.Select(t => t.FamilyKey).Distinct().Count());
+        // 2026-11-09 roster (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md): four v1 themes retired, four more rewritten as
+        // v2, Graphite's Light variant removed. Default and Daylight stay v1; 16 families list 23 entries (one per variant).
+        Assert.Equal(2, themes.Count(t => t.IsLegacy));
+        Assert.Equal(43, themes.Count);                                       // 18 dark + 18 light + 4 accessibility + 3 hidden OLED variants
+        Assert.Equal(22, themes.Select(t => t.FamilyKey).Distinct().Count());
         Assert.All(themes, t => Assert.True(t.IsBuiltIn));
         Assert.Contains(themes, t => t.Key == ThemeService.DefaultThemeKey && t.IsActive);
-        Assert.Contains(themes, t => t.Key == "windows_11");
-        Assert.Contains(themes, t => t.Key == "cool_technical");
-        Assert.Contains(themes, t => t.Key == "vibrant_pop");
-        Assert.Contains(themes, t => t.Key == "vintage_paperback");
+        Assert.Contains(themes, t => t.Key == "windows_11:light");
+        Assert.Contains(themes, t => t.Key == "crimson_ink:dark");
+        Assert.Contains(themes, t => t.Key == "graphite:dark");
+        Assert.DoesNotContain(themes, t => t.Key is "cool_technical" or "vibrant_pop" or "vintage_paperback" or "overcast" or "graphite:light");
     }
 
     /// <summary>docs/superpowers/specs/2026-09-07-appearance-redesign-design.md - the preview-card
@@ -123,7 +124,7 @@ public class ThemeServiceTests : IDisposable
         Assert.Equal(Avalonia.Media.Color.Parse("#1B1E24"), ((Avalonia.Media.SolidColorBrush)defaultTheme.SurfaceBrush).Color);
         Assert.Equal(Avalonia.Media.Color.Parse("#B3ADA0"), ((Avalonia.Media.SolidColorBrush)defaultTheme.TextMutedBrush).Color);
 
-        var windows11 = themes.Single(t => t.Key == "windows_11");
+        var windows11 = themes.Single(t => t.Key == "windows_11:light");
         Assert.Equal(Avalonia.Media.Color.Parse("#0078D4"), ((Avalonia.Media.SolidColorBrush)windows11.AccentBrush).Color);
     }
 
@@ -132,9 +133,9 @@ public class ThemeServiceTests : IDisposable
     /// design doc above) - this is the regression test for that specific bug.</summary>
     [Theory]
     [InlineData("windows_11")]
-    [InlineData("cool_technical")]
-    [InlineData("vibrant_pop")]
-    [InlineData("vintage_paperback")]
+    [InlineData("matrix")]
+    [InlineData("maximum_contrast")]
+    [InlineData("colorblind_safe")]
     public void LoadTheme_EveryNewBuiltIn_ParsesWithoutThrowing(string key)
     {
         var service = CreateService();
@@ -146,9 +147,9 @@ public class ThemeServiceTests : IDisposable
     }
 
     [Theory]
-    [InlineData("cool_technical")]
-    [InlineData("vibrant_pop")]
-    [InlineData("vintage_paperback")]
+    [InlineData("default")]
+    [InlineData("graphite:dark")]
+    [InlineData("abyss:dark")]
     public void ApplyTheme_EveryNewBuiltIn_AppliesWithoutThrowing(string key)
     {
         var service = CreateService();
@@ -221,7 +222,7 @@ public class ThemeServiceTests : IDisposable
     [Fact]
     public void ApplyTheme_WritesTheEraTokens()
     {
-        CreateService().ApplyTheme("vintage_paperback");
+        CreateService().ApplyTheme("reading_room:lamplight");
 
         var resources = Application.Current!.Resources;
         foreach (var age in new[] { "Platinum", "Golden", "Silver", "Bronze", "Modern" })
@@ -244,7 +245,7 @@ public class ThemeServiceTests : IDisposable
         int raisedCount = 0;
         service.ThemeApplied += () => raisedCount++;
 
-        service.ApplyTheme("cool_technical");
+        service.ApplyTheme("graphite:dark");
 
         Assert.Equal(1, raisedCount);
     }
@@ -256,9 +257,9 @@ public class ThemeServiceTests : IDisposable
     /// </summary>
     [Theory]
     [InlineData("default", "Dark")]
-    [InlineData("cool_technical", "Dark")]
-    [InlineData("vibrant_pop", "Dark")]
-    [InlineData("vintage_paperback", "Dark")]
+    [InlineData("graphite:dark", "Dark")]
+    [InlineData("abyss:dark", "Dark")]
+    [InlineData("reading_room:lamplight", "Dark")]
     [InlineData("windows_11", "Light")]
     public void ApplyTheme_SetsRequestedThemeVariant_MatchingThemeMode(string key, string expectedVariantName)
     {
@@ -437,13 +438,13 @@ public class ThemeServiceTests : IDisposable
     {
         var service = CreateService();
 
-        service.ApplyTheme("cool_technical");
-        service.ApplyTheme("windows_11");
+        service.ApplyTheme("graphite:dark");
+        service.ApplyTheme("daylight");
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         var settings = context.GetOrCreateAppSettings();
-        Assert.Equal("cool_technical", settings.LastDarkThemeKey);
-        Assert.Equal("windows_11", settings.LastLightThemeKey);
+        Assert.Equal("graphite:dark", settings.LastDarkThemeKey);
+        Assert.Equal("daylight", settings.LastLightThemeKey);
     }
 
     /// <summary>Real bug caught in review: a fixed "always darken" accent-override derivation
@@ -575,9 +576,8 @@ public class ThemeServiceTests : IDisposable
     /// theme defines its own ChartBlue/ChartViolet rather than falling back to the default's.</summary>
     [Theory]
     [InlineData("windows_11", "#038387", "#8764B8")]
-    [InlineData("cool_technical", "#6E7FD8", "#B085D9")]
-    [InlineData("vibrant_pop", "#4E9DE8", "#B14EE8")]
-    [InlineData("vintage_paperback", "#5B7A94", "#7A5B78")]
+    [InlineData("abyss:dark", "#4FC3F7", "#9D8CFF")]
+    [InlineData("tokyo_midnight:dark", "#7DF9FF", "#B388FF")]
     public void ApplyTheme_SetsChartColors_PerTheme(string key, string expectedBlue, string expectedViolet)
     {
         var service = CreateService();
@@ -604,7 +604,6 @@ public class ThemeServiceTests : IDisposable
     /// same regression-proof shape as LoadTheme_EveryNewBuiltIn_ParsesWithoutThrowing above.</summary>
     [Theory]
     [InlineData("daylight", "Light")]
-    [InlineData("overcast", "Light")]
     [InlineData("maximum_contrast", "Dark")]
     [InlineData("colorblind_safe", "Dark")]
     [InlineData("matrix", "Dark")]
@@ -620,7 +619,6 @@ public class ThemeServiceTests : IDisposable
 
     [Theory]
     [InlineData("daylight")]
-    [InlineData("overcast")]
     [InlineData("maximum_contrast")]
     [InlineData("colorblind_safe")]
     [InlineData("matrix")]
@@ -630,7 +628,7 @@ public class ThemeServiceTests : IDisposable
 
         service.ApplyTheme(key);
 
-        Assert.Equal(key, service.GetAvailableThemes().Single(t => t.IsActive).Key);
+        Assert.StartsWith(key, service.GetAvailableThemes().Single(t => t.IsActive).Key);   // a two-half family stores family:variant
     }
 
     /// <summary>Matrix-specific fields (§ Extended scope) - "category" is backend-only/not a mode
@@ -734,14 +732,14 @@ public class ThemeServiceTests : IDisposable
     {
         var fixedNow = new DateTimeOffset(2026, 1, 1, 21, 0, 0, TimeSpan.Zero); // 9pm - default dark window 20:00-07:00
         var service = CreateService(() => fixedNow);
-        service.ApplyTheme("cool_technical"); // sets LastDarkThemeKey
-        service.ApplyTheme("windows_11"); // sets LastLightThemeKey, leaves this the active theme
+        service.ApplyTheme("default"); // sets LastDarkThemeKey
+        service.ApplyTheme("daylight"); // sets LastLightThemeKey, leaves this the active theme
         int crossfadeRaised = 0;
         service.ScheduledThemeCrossfadeRequested += () => crossfadeRaised++;
 
         service.SetThemeAutoMode(Paperbunkr.Data.Entities.ThemeAutoMode.Scheduled);
 
-        Assert.Equal("cool_technical", service.GetActiveThemeKey());
+        Assert.Equal("default", service.GetActiveThemeKey());
         Assert.Equal(1, crossfadeRaised);
     }
 
@@ -750,12 +748,12 @@ public class ThemeServiceTests : IDisposable
     {
         var fixedNow = new DateTimeOffset(2026, 1, 1, 9, 0, 0, TimeSpan.Zero); // 9am - inside the default light window
         var service = CreateService(() => fixedNow);
-        service.ApplyTheme("windows_11");
-        service.ApplyTheme("cool_technical");
+        service.ApplyTheme("daylight");
+        service.ApplyTheme("default");
 
         service.SetThemeAutoMode(Paperbunkr.Data.Entities.ThemeAutoMode.Scheduled);
 
-        Assert.Equal("windows_11", service.GetActiveThemeKey());
+        Assert.Equal("daylight", service.GetActiveThemeKey());
     }
 
     [Fact]
@@ -763,8 +761,8 @@ public class ThemeServiceTests : IDisposable
     {
         var fixedNow = new DateTimeOffset(2026, 1, 1, 21, 0, 0, TimeSpan.Zero);
         var service = CreateService(() => fixedNow);
-        service.ApplyTheme("windows_11"); // LastLightThemeKey
-        service.ApplyTheme("cool_technical"); // LastDarkThemeKey, already active - already the 9pm target
+        service.ApplyTheme("daylight"); // LastLightThemeKey
+        service.ApplyTheme("default"); // LastDarkThemeKey, already active - already the 9pm target
         int crossfadeRaised = 0;
         service.ScheduledThemeCrossfadeRequested += () => crossfadeRaised++;
 

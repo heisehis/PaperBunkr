@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -124,10 +123,15 @@ public sealed class ShareClient : IDisposable
             Timeout = timeout ?? TimeSpan.FromSeconds(10),
         };
 
+        string target = $"{host}:{port}";
         try
         {
             using HttpResponseMessage response = await http.GetAsync("/v1/hello", cancellationToken).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HostUnreachableException(ConnectionFailure.ForStatus(target, response.StatusCode));
+            }
+
             CheckProtocol(response);
             var hello = await response.Content.ReadFromJsonAsync<HelloResponse>(Json, cancellationToken).ConfigureAwait(false)
                         ?? throw new HostUnreachableException("The host sent an empty response.");
@@ -135,11 +139,11 @@ public sealed class ShareClient : IDisposable
         }
         catch (HttpRequestException ex)
         {
-            throw new HostUnreachableException($"Could not reach {host}:{port}.", ex);
+            throw new HostUnreachableException(ConnectionFailure.Describe(target, ex), ex);
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new HostUnreachableException($"Timed out reaching {host}:{port}.", ex);
+            throw new HostUnreachableException(ConnectionFailure.NoAnswer(target), ex);
         }
     }
 
@@ -268,7 +272,7 @@ public sealed class ShareClient : IDisposable
             }
             catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
-                throw new HostUnreachableException("The host did not respond in time.", ex);
+                throw new HostUnreachableException(ConnectionFailure.NoAnswer(Target), ex);
             }
 
             if (response.StatusCode == HttpStatusCode.Unauthorized && authenticated && attempt == 0)
@@ -294,7 +298,7 @@ public sealed class ShareClient : IDisposable
             {
                 HttpStatusCode.Unauthorized => new AuthFailedException(),
                 HttpStatusCode.TooManyRequests => new LockedOutException(retryAfter ?? TimeSpan.FromMinutes(1)),
-                _ => new HostUnreachableException($"The host answered {(int)status}."),
+                _ => new HostUnreachableException(ConnectionFailure.ForStatus(Target, status)),
             };
         }
     }
@@ -320,7 +324,7 @@ public sealed class ShareClient : IDisposable
             }
             catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
-                throw new HostUnreachableException("The host did not respond in time.", ex);
+                throw new HostUnreachableException(ConnectionFailure.NoAnswer(Target), ex);
             }
 
             using (response)
@@ -355,10 +359,11 @@ public sealed class ShareClient : IDisposable
             return new CertificateMismatchException(_handler.PinnedFingerprint, actual);
         }
 
-        return ex.InnerException is AuthenticationException
-            ? new HostUnreachableException("The secure connection to the host failed.", ex)
-            : new HostUnreachableException("Could not reach the host.", ex);
+        return new HostUnreachableException(ConnectionFailure.Describe(Target, ex), ex);
     }
+
+    /// <summary>"host:port" for messages, from the client's base address.</summary>
+    private string Target => _http.BaseAddress is { } b ? $"{b.Host}:{b.Port}" : "the host";
 
     private static void CheckProtocol(HttpResponseMessage response)
     {

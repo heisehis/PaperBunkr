@@ -116,7 +116,9 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:TagPillViewModel">
                                             <Button Classes="creditName" Command="{Binding SearchCommand}" Background="Transparent" BorderThickness="0" Padding="0,0,6,0" Cursor="Hand">
-                                                <TextBlock Text="{Binding Value}" FontSize="{DynamicResource PbFontSizeBody}" Foreground="{DynamicResource PbTextBrush}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="4"><Border Width="20" Height="20" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" IsVisible="{Binding HasImage}" VerticalAlignment="Center">
+                                                            <Image views:AsyncEntityImage.Path="{Binding ImagePath}" Stretch="UniformToFill" />
+                                                        </Border><TextBlock Text="{Binding Value}" Classes="pbTextBody" VerticalAlignment="Center" /></StackPanel>
                                             </Button>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -128,7 +130,9 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:TagPillViewModel">
                                             <Button Classes="creditName" Command="{Binding SearchCommand}" Background="Transparent" BorderThickness="0" Padding="0,0,6,0" Cursor="Hand">
-                                                <TextBlock Text="{Binding Value}" FontSize="{DynamicResource PbFontSizeBody}" Foreground="{DynamicResource PbTextBrush}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="4"><Border Width="20" Height="20" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" IsVisible="{Binding HasImage}" VerticalAlignment="Center">
+                                                            <Image views:AsyncEntityImage.Path="{Binding ImagePath}" Stretch="UniformToFill" />
+                                                        </Border><TextBlock Text="{Binding Value}" Classes="pbTextBody" VerticalAlignment="Center" /></StackPanel>
                                             </Button>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -148,6 +152,9 @@
                                                 Classes.recurrent="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=recurrent}"
                                                 Classes.incidental="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=incidental}">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <Border Width="20" Height="20" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" IsVisible="{Binding HasImage}">
+                                                    <Image views:AsyncEntityImage.Path="{Binding ImagePath}" Stretch="UniformToFill" />
+                                                </Border>
                                                 <Ellipse Width="5" Height="5" VerticalAlignment="Center" IsVisible="{Binding IsWeighted}"
                                                          Fill="{DynamicResource PbAccentTextBrush}" />
                                                 <TextBlock Text="{Binding Value}" FontWeight="{Binding TextWeight}" />

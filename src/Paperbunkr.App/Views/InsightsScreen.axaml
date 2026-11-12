@@ -930,7 +930,7 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="meta:CompositionSlice">
                                         <Button Classes="filterRow"
-                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.OpenLibraryFilterCommand}"
+                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.OpenCreatorCommand}"
                                                 CommandParameter="{Binding Label}">
                                             <Grid ColumnDefinitions="*,Auto" Margin="0,2">
                                                 <TextBlock Grid.Column="0" Text="{Binding Label}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
@@ -950,7 +950,7 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="meta:CompositionSlice">
                                         <Button Classes="filterRow"
-                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.OpenLibraryFilterCommand}"
+                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.OpenCreatorCommand}"
                                                 CommandParameter="{Binding Label}">
                                             <Grid ColumnDefinitions="*,Auto" Margin="0,2">
                                                 <TextBlock Grid.Column="0" Text="{Binding Label}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />

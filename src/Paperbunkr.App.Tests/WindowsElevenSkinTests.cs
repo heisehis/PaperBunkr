@@ -82,11 +82,11 @@ public class WindowsElevenSkinTests : IDisposable
         Assert.Null(error);
 
         var theme = service.LoadTheme("windows_11");
-        Assert.Equal("Windows 11", theme.Name);
+        Assert.Equal("Windows 11 · Light", theme.Name);
         Assert.Equal(8, theme.Radius);
 
         var themes = service.GetAvailableThemes();
-        Assert.Contains(themes, t => t.Key == "windows_11" && t.Name == "Windows 11");
+        Assert.Contains(themes, t => t.Key == "windows_11:light" && t.Name == "Windows 11 · Light");
 
         service.ApplyTheme("windows_11");
 
@@ -105,6 +105,6 @@ public class WindowsElevenSkinTests : IDisposable
         Assert.Equal(new CornerRadius(6), resources["PbRadiusSm"]);
         Assert.Equal(new CornerRadius(16), resources["PbRadiusLg"]);
 
-        Assert.True(service.GetAvailableThemes().Single(t => t.Key == "windows_11").IsActive);
+        Assert.True(service.GetAvailableThemes().Single(t => t.Key == "windows_11:light").IsActive);
     }
 }

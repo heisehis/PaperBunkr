@@ -695,6 +695,10 @@
                             <TextBlock Grid.Column="0" Classes="displayRow" Text="Dog-ear preview" />
                             <CheckBox Grid.Column="1" IsChecked="{Binding DogEarThumbnails}" AutomationProperties.Name="Dog-ear preview" />
                         </Grid>
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsCoverOverlayScope}">
+                            <TextBlock Grid.Column="0" Classes="displayRow" Text="Collection dots" ToolTip.Tip="Up to three dots in each collection's colour on a cover" />
+                            <CheckBox Grid.Column="1" IsChecked="{Binding ShowCollectionBadges}" AutomationProperties.Name="Collection dots" />
+                        </Grid>
                     </StackPanel>
                 </StackPanel>
                 </ScrollViewer>

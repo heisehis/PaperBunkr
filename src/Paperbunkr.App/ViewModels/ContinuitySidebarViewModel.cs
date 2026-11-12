@@ -162,6 +162,7 @@ public partial class ContinuitySidebarViewModel : ViewModelBase
                 e.Name,
                 Count = e.Members.Count,
                 e.StartDate,
+                Endpoints = e.DateEndpoints,
                 EventTypes = e.TypeAssignments.Select(t => t.Type).ToList(),
                 FirstYear = e.Members.Min(m => m.Issue!.Year),
             })
@@ -183,7 +184,7 @@ public partial class ContinuitySidebarViewModel : ViewModelBase
                 Name = row.Name,
                 EventTypesLabel = string.Join(" · ", row.EventTypes.Select(FormatEventType)),
                 MemberCount = row.Count,
-                StartYear = row.StartDate?.Year ?? row.FirstYear,
+                StartYear = row.Endpoints.FirstOrDefault(d => !d.IsEnd)?.Year ?? row.StartDate?.Year ?? row.FirstYear,
                 IsActive = row.Id == active,
                 DeleteConfirm = new TwoStepConfirm(() => _deleteEvent(id), idleLabel: "Delete", armedLabel: "Confirm delete?"),
             });

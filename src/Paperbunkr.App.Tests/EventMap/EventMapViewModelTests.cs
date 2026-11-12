@@ -16,6 +16,61 @@ namespace Paperbunkr.App.Tests.EventMap;
 [Collection(nameof(AvaloniaTestCollection))]
 public class EventMapViewModelTests
 {
+    [Fact]
+    public async Task MatrixAndProgressUpdateImmediatelyWhenReadStateChanges()
+    {
+        var vm = new Harness(Source("No match", Row(SeriesA, "1", 1), Row(SeriesB, "1", 2))).Create();
+        await vm.LoadAsync(EventId);
+        vm.Select(0);
+        Assert.Equal("0 / 2 read", vm.ProgressText);
+        vm.ToggleReadCommand.Execute(null);
+        Assert.Equal("1 / 2 read", vm.ProgressText);
+        Assert.Equal(1, vm.Matrix.Rows.Single(r => r.SeriesId == SeriesA).Cells[^1].Read);
+        Assert.Contains("1 read", vm.RollCallRows.Single(r => r.SeriesId == SeriesA).CountLabel);
+    }
+
+    [Fact]
+    public async Task RelationSpineCanBeOverriddenByTheNameMatch()
+    {
+        var source = Source("Crisis", Row(Crisis, "1", 1), Row(SeriesA, "1", 2), Row(SeriesB, "1", 3)) with
+        {
+            UserRelations = new[] { (SeriesB, SeriesA, RelationType.TieIn) },
+        };
+        var harness = new Harness(source);
+        var vm = harness.Create();
+        await vm.LoadAsync(EventId);
+        Assert.Contains("from your relations", vm.StatusText);
+        vm.SpineText = "Crisis";
+        Assert.Equal((EventId, (int?)Crisis), harness.SavedSpines.Last());
+        Assert.Contains("(set)", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task HideReadKeepsNewlyReadSelectionUntilMoving()
+    {
+        var vm = new Harness(Source("No match", Row(SeriesA, "1", 1), Row(SeriesB, "1", 2))).Create();
+        await vm.LoadAsync(EventId);
+        vm.HideRead = true;
+        vm.ActivateCard(0);
+        int readIssue = vm.SelectedCard!.IssueId;
+        vm.ToggleReadCommand.Execute(null);
+        Assert.Contains(vm.Cards, c => c.IssueId == readIssue);
+        vm.Select(1);
+        TestDispatcher.Drain();
+        Assert.DoesNotContain(vm.Cards, c => c.IssueId == readIssue);
+        Assert.Single(vm.Cards);
+    }
+
+    [Fact]
+    public async Task HideReadJumpUsesFirstVisibleCardEvenWhenSpineStartsLater()
+    {
+        var vm = new Harness(Source("Crisis", Row(SeriesA, "1", 1), Row(Crisis, "1", 2))).Create();
+        await vm.LoadAsync(EventId);
+        vm.HideRead = true;
+        vm.JumpToFirstUnreadCommand.Execute(null);
+        Assert.Equal(0, vm.SelectedIndex);
+    }
+
     private const int EventId = 1;
 
     private sealed class Harness

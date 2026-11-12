@@ -58,7 +58,7 @@
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BoxShadow" Value="0 8 24 -12 #80000000" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbCoverShadow}" />
             <Setter Property="ClipToBounds" Value="True" />
         </Style>
 
@@ -1499,7 +1499,7 @@
          Grid.Column="0") | GridSplitter | live preview panel. The Collections/Reading Lists/Smart
          Lists sidebar lives in MainWindow.axaml (shell chrome), not here - it was never a column of
          this Grid, see the design doc's implementation-time correction. -->
-    <Grid x:Name="RootGrid" RowDefinitions="Auto,*"
+    <Grid x:Name="RootGrid" RowDefinitions="Auto,Auto,*"
           DragDrop.AllowDrop="True" DragDrop.DragOver="OnDragOver" DragDrop.Drop="OnDrop">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
@@ -1515,11 +1515,15 @@
         <!-- ============ Toolbar (extracted to Views/LibraryToolbar.axaml, 4b §1) ============ -->
         <views:LibraryToolbar x:Name="Toolbar" Grid.Row="0" Grid.ColumnSpan="3" />
 
+        <!-- ============ Collection banner (docs/superpowers/specs/2026-11-06-collection-surfaces-design.md) - the active collection's face; collapsed
+             (Auto row, invisible) for "All Series". ============ -->
+        <views:CollectionBanner x:Name="Banner" Grid.Row="1" Grid.ColumnSpan="3" />
+
         <!-- ============ Poster grid (UI rework Phase 4a) - one grid replacing Compact/
              Comfortable/Cover-only. Same 4-way inner split (Issue/Series x grouped/ungrouped);
              PosterCardWidth/Height (density slider) size the wrap panel, EffectiveShowTileTitles
              gates each tile's own text row. ============ -->
-        <controls:SmoothScrollViewer x:Name="PosterGridScrollViewer" Grid.Row="1" IsVisible="{Binding IsPosterGrid}">
+        <controls:SmoothScrollViewer x:Name="PosterGridScrollViewer" Grid.Row="2" IsVisible="{Binding IsPosterGrid}">
             <Grid RowDefinitions="Auto,*">
                 <!-- Continue reading strip: first thing in the scroller, so it scrolls away with the grid. Not a Panel on
                      purpose: the pinned-header lookup walks this Grid's Panel children to find the grids. -->
@@ -1603,7 +1607,7 @@
              packs rows from those widths without decoding every cover - VirtualizingVariableWrapPanel,
              not the uniform-cell VirtualizingWrapPanel the other grids ride. Landscape covers wide,
              portrait covers narrow, side by side - the reason Panorama exists. -->
-        <controls:SmoothScrollViewer x:Name="PanoramaScrollViewer" Grid.Row="1" IsVisible="{Binding IsPanoramaGrid}">
+        <controls:SmoothScrollViewer x:Name="PanoramaScrollViewer" Grid.Row="2" IsVisible="{Binding IsPanoramaGrid}">
             <Grid RowDefinitions="Auto,*">
                 <!-- Continue reading strip: first thing in the scroller, so it scrolls away with the grid. Not a Panel on
                      purpose: the pinned-header lookup walks this Grid's Panel children to find the grids. -->
@@ -1668,7 +1672,7 @@
         <!-- ============ Bookshelf (Cosmetics pitch #19) ============ -->
         <!-- Spines packed by their own width on shelf rows. ShelfBoards draws a board at the foot of every row behind the panel (same grid, same margin,
              so it scrolls with the spines). Same 4-way inner split as the other grids (Issue/Series x grouped/ungrouped). -->
-        <controls:SmoothScrollViewer x:Name="BookshelfScrollViewer" Grid.Row="1" IsVisible="{Binding IsBookshelfView}">
+        <controls:SmoothScrollViewer x:Name="BookshelfScrollViewer" Grid.Row="2" IsVisible="{Binding IsBookshelfView}">
             <Grid RowDefinitions="Auto,*">
                 <views:LibraryContinueStrip Grid.Row="0" IsVisible="{Binding ShowContinueStrip}" />
                 <Panel Grid.Row="1" IsVisible="{Binding IsIssueGranularity}">
@@ -1741,7 +1745,7 @@
         <!-- ============ List ============ -->
         <!-- One virtualized ListBox per granularity over the flat FlatRows/FlatCovers projection
              (grouped => GridSectionHeader rows interleaved). See the ListBox.virtualRows style. -->
-        <Panel Grid.Row="1" IsVisible="{Binding IsListView}">
+        <Panel Grid.Row="2" IsVisible="{Binding IsListView}">
             <ListBox x:Name="ListModeIssueBox" Classes="virtualRows" IsVisible="{Binding IsIssueGranularity}"
                      ItemsSource="{Binding IssueList.FlatRows}"
                      controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
@@ -1767,7 +1771,7 @@
         </Panel>
 
         <!-- ============ Details ============ -->
-        <DockPanel Grid.Row="1" IsVisible="{Binding IsDetailsTableView}" Margin="24,18,24,0">
+        <DockPanel Grid.Row="2" IsVisible="{Binding IsDetailsTableView}" Margin="24,18,24,0">
             <!-- Configurable, click-to-sort header (4b §8) - same DetailsColumns source + fixed
                  widths as each data row, so hiding a column keeps both aligned. Right-click for the
                  column picker. -->
@@ -1843,7 +1847,7 @@
         </DockPanel>
 
         <!-- ============ Tiles ============ -->
-        <controls:SmoothScrollViewer x:Name="TilesScrollViewer" Grid.Row="1" IsVisible="{Binding IsTilesView}">
+        <controls:SmoothScrollViewer x:Name="TilesScrollViewer" Grid.Row="2" IsVisible="{Binding IsTilesView}">
             <Grid RowDefinitions="Auto,*">
                 <!-- Continue reading strip: first thing in the scroller, so it scrolls away with the grid. Not a Panel on
                      purpose: the pinned-header lookup walks this Grid's Panel children to find the grids. -->
@@ -1909,7 +1913,7 @@
              with at least one Issue/Book member; a series-only collection keeps using whichever
              normal view-mode grid above is active (full sort/group support, no need to duplicate
              it here). ============ -->
-        <controls:SmoothScrollViewer x:Name="CollectionGridScrollViewer" Grid.Row="1" IsVisible="{Binding IsCollectionView}">
+        <controls:SmoothScrollViewer x:Name="CollectionGridScrollViewer" Grid.Row="2" IsVisible="{Binding IsCollectionView}">
             <ItemsControl ItemsSource="{Binding CollectionTiles}" ItemTemplate="{StaticResource CollectionTileTemplate}" Margin="24,22,24,40">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><controls:VirtualizingWrapPanel PrefetchDecodeWidth="{Binding PosterCardWidth}" ItemWidth="{Binding PosterCardWidth}" ItemHeight="{Binding PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
@@ -1923,7 +1927,7 @@
              cannot stick natively; LibraryScreen.axaml.cs shows this once a group's own header has scrolled under the top
              edge and hides it as the next group's header arrives. No push-off animation. Opaque, so it covers the real
              header while that one is still half in view. -->
-        <Border x:Name="PinnedGroupHeader" Grid.Row="1" IsVisible="False" IsHitTestVisible="False" VerticalAlignment="Top"
+        <Border x:Name="PinnedGroupHeader" Grid.Row="2" IsVisible="False" IsHitTestVisible="False" VerticalAlignment="Top"
                 Background="{DynamicResource PbSurface1Brush}" Padding="24,10,24,8" Margin="0,0,18,0">
             <StackPanel Orientation="Horizontal">
                 <TextBlock x:Name="PinnedGroupHeaderText" Classes="pbTextSection" VerticalAlignment="Center" />
@@ -1936,7 +1940,7 @@
              Phase B) - no virtualized ListBox backs this grid, so there's no real ScrollIntoView;
              LibraryScreen.axaml.cs estimates a row-based offset instead. Only meaningful against an
              alphabetically-sorted, ungrouped flat list (Phase C's ShowAlphabetIndex). -->
-        <Border Grid.Row="1" IsVisible="{Binding ShowAlphabetIndex}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+        <Border Grid.Row="2" IsVisible="{Binding ShowAlphabetIndex}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
                 Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
                 BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="2,6">
             <ItemsControl x:Name="AlphabetRail" ItemsSource="{Binding AlphabetIndex}">
@@ -1958,7 +1962,7 @@
 
         <!-- Empty state (4b §9) - message + action chosen by VM computed properties: a zero-result
              search, a filter with no matches, or an entirely empty library. -->
-        <StackPanel Grid.Row="1" Spacing="12" IsVisible="{Binding ShowEmptyState}"
+        <StackPanel Grid.Row="2" Spacing="12" IsVisible="{Binding ShowEmptyState}"
                     HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="320">
             <fi:SymbolIcon Symbol="Layer" FontSize="{StaticResource PbIconSizeXl}" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
             <TextBlock Classes="pbTextBody" Text="{Binding EmptyStateMessage}" TextWrapping="Wrap"
@@ -1968,23 +1972,25 @@
                     AutomationProperties.AutomationId="LibraryEmptyStateAction" />
         </StackPanel>
 
+        <views:CollectionEmptyState Grid.Row="2" />
+
         <!-- ============ Live preview panel (docs/superpowers/specs/2026-09-14-library-visual-
              redesign-design.md §1/§4) - GridSplitter and panel share one visibility switch
              (ShowPreviewPanelColumn) so a hidden panel leaves no stranded splitter and no dead
              Auto-width column; the list column's * genuinely reclaims that space. ============ -->
-        <GridSplitter Grid.Row="1" Grid.Column="1" Width="6" ResizeDirection="Columns"
+        <GridSplitter Grid.Row="2" Grid.Column="1" Width="6" ResizeDirection="Columns"
                       Background="{DynamicResource PbBorderBrush}"
                       IsVisible="{Binding ShowPreviewPanelColumn}" />
-        <Border Grid.Row="1" Grid.Column="2" IsVisible="{Binding ShowPreviewPanelColumn}"
+        <Border Grid.Row="2" Grid.Column="2" IsVisible="{Binding ShowPreviewPanelColumn}"
                 BorderThickness="1,0,0,0" BorderBrush="{DynamicResource PbBorderBrush}">
             <views:LibraryPreviewPanel x:Name="PreviewPanel" />
         </Border>
 
         <!-- ============ Add-issue overlay (4b §6) - centered FloatingPanel over the grid, state on
              LibraryScreenViewModel (no MainViewModel extraction). Escape / backdrop click close. ============ -->
-        <Border Grid.Row="0" Grid.RowSpan="2" Grid.ColumnSpan="3" IsVisible="{Binding IsAddIssueOpen}" Background="#B0000000"
+        <Border Grid.Row="0" Grid.RowSpan="3" Grid.ColumnSpan="3" IsVisible="{Binding IsAddIssueOpen}" Background="#B0000000"
                 PointerPressed="OnAddIssueBackdropPressed" />
-        <Border Grid.Row="0" Grid.RowSpan="2" Grid.ColumnSpan="3" IsVisible="{Binding IsAddIssueOpen}" Classes="floatingPanel"
+        <Border Grid.Row="0" Grid.RowSpan="3" Grid.ColumnSpan="3" IsVisible="{Binding IsAddIssueOpen}" Classes="floatingPanel"
                 Width="380" Padding="22" HorizontalAlignment="Center" VerticalAlignment="Center">
             <StackPanel Spacing="12">
                 <TextBlock Text="Add issue to library" Classes="pbTextHeading" />

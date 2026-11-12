@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.screentone",
+  "name": "Screentone",
+  "base": {
+    "metrics": {
+      "radius": 2,
+      "radiusSm": 2,
+      "radiusLg": 3
+    },
+    "typography": {
+      "heading": {
+        "family": "Arial",
+        "weight": "Black"
+      },
+      "display": {
+        "family": "Arial",
+        "weight": "Black"
+      }
+    }
+  },
+  "variants": {
+    "paper": {
+      "name": "Paper",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#FFFFFF",
+        "ink": "#000000",
+        "accent": "#000000",
+        "success": "#1E6B2E",
+        "badge": "#E4002B"
+      },
+      "materials": {
+        "tone": {
+          "type": "texture",
+          "source": "textures/light-tone.png",
+          "fallback": "#FFFFFF"
+        },
+        "selTone": {
+          "type": "texture",
+          "source": "textures/light-selection.png",
+          "fallback": "#EBEBEB"
+        }
+      },
+      "surfaces": {
+        "navigation": "tone",
+        "selection": "selTone"
+      },
+      "semantic": {
+        "surface": {
+          "raised": "#FFFFFF",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#000000",
+          "strong": "#000000"
+        },
+        "text": {
+          "accent": "#000000"
+        },
+        "action": {
+          "primaryText": "#FFFFFF",
+          "soft": "#1F000000"
+        },
+        "badge": {
+          "text": "#FFFFFF"
+        },
+        "status": {
+          "danger": "#E4002B",
+          "warning": "#7A5A00",
+          "info": "#000000"
+        },
+        "chart": {
+          "series": {
+            "1": "#000000",
+            "2": "#E4002B"
+          }
+        },
+        "glow": {
+          "color": "#66000000"
+        },
+        "selection": {
+          "background": "#1F000000"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "borderThickness": 3,
+          "foreground": "#FFFFFF"
+        },
+        "button.secondary": {
+          "borderThickness": 3
+        },
+        "button.ghost": {
+          "borderThickness": 3
+        },
+        "chip": {
+          "borderThickness": 3
+        },
+        "panel.floating": {
+          "borderThickness": 3
+        }
+      }
+    },
+    "ink": {
+      "name": "Ink",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#0A0A0A",
+        "ink": "#FFFFFF",
+        "accent": "#FFFFFF",
+        "success": "#6FD08A",
+        "badge": "#FF3355"
+      },
+      "materials": {
+        "tone": {
+          "type": "texture",
+          "source": "textures/dark-tone.png",
+          "fallback": "#0A0A0A"
+        },
+        "selTone": {
+          "type": "texture",
+          "source": "textures/dark-selection.png",
+          "fallback": "#222222"
+        }
+      },
+      "surfaces": {
+        "navigation": "tone",
+        "selection": "selTone"
+      },
+      "semantic": {
+        "surface": {
+          "raised": "#121212",
+          "overlay": "#1A1A1A"
+        },
+        "border": {
+          "default": "#FFFFFF",
+          "strong": "#FFFFFF"
+        },
+        "text": {
+          "accent": "#FFFFFF"
+        },
+        "action": {
+          "primaryText": "#000000",
+          "soft": "#26FFFFFF"
+        },
+        "badge": {
+          "text": "#000000"
+        },
+        "status": {
+          "danger": "#FF3355",
+          "warning": "#FFD24D",
+          "info": "#FFFFFF"
+        },
+        "chart": {
+          "series": {
+            "1": "#FFFFFF",
+            "2": "#FF3355"
+          }
+        },
+        "glow": {
+          "color": "#66FFFFFF"
+        },
+        "selection": {
+          "background": "#26FFFFFF"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "borderThickness": 3,
+          "foreground": "#000000"
+        },
+        "button.secondary": {
+          "borderThickness": 3
+        },
+        "button.ghost": {
+          "borderThickness": 3
+        },
+        "chip": {
+          "borderThickness": 3
+        },
+        "panel.floating": {
+          "borderThickness": 3
+        }
+      }
+    }
+  }
+}

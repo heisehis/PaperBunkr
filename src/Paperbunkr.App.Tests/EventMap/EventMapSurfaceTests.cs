@@ -236,6 +236,7 @@ public class EventMapSurfaceTests
                     runInBackground: work => Task.FromResult(work()),
                     loadContinuity: _ => data);
                 vm.LoadContinuityAsync(7).GetAwaiter().GetResult();
+                vm.ToggleShortLanesCommand.Execute(null); // This test exercises scrolling through all lanes.
 
                 var view = new Paperbunkr.App.Views.EventMapView { DataContext = vm };
                 var window = new Window { Content = view, Width = 900, Height = 420 };
@@ -243,18 +244,13 @@ public class EventMapSurfaceTests
                 RunLayout(window);
                 RunLayout(window);
 
-                var scroller = view.FindControl<ScrollViewer>("Scroller")!;
-                var headers = view.FindControl<ItemsControl>("LaneHeaders")!;
-                double lanesHeight = vm.LaneHeaders.Sum(h => h.Height);
-                Assert.True(lanesHeight > scroller.Viewport.Height, "the test needs more lanes than fit");
-
-                scroller.Offset = new Vector(0, scroller.Extent.Height - scroller.Viewport.Height);
+                var canvas = view.FindControl<EventMapCanvas>("MapCanvas")!;
+                var total = vm.Layout.TotalSizeFor(canvas.Metrics);
+                Assert.True(total.Height > canvas.ContentViewport.Height, "the test needs more lanes than fit");
+                canvas.Offset = new Vector(0, total.Height - canvas.ContentViewport.Height);
                 RunLayout(window);
-
-                Assert.True(headers.Bounds.Height >= lanesHeight - 0.5, $"headers {headers.Bounds.Height} < lanes {lanesHeight}");
-                var last = headers.ContainerFromIndex(vm.LaneHeaders.Count - 1)!;
-                double lastTop = last.TranslatePoint(new Point(0, 0), scroller)!.Value.Y;
-                Assert.InRange(lastTop, 0, scroller.Viewport.Height);
+                var last = vm.Layout.CardRect(vm.Layout.Cells.Count - 1, canvas.Metrics);
+                Assert.InRange(last.Center.Y - canvas.Offset.Y, 0, canvas.ContentViewport.Height);
                 window.Close();
             }
             finally

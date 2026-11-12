@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -87,6 +88,59 @@ public sealed class TileCosmeticsOverlay : Control
         if (CosmeticThumbnailSettings.ProgressRing && ShowsProgressBar(source.ReadFraction, source.IsFinished))
         {
             DrawBar(context, source);
+        }
+
+        // Membership dots (docs/superpowers/specs/2026-11-06-collection-surfaces-design.md): the store is empty unless the setting is on.
+        if (DataContext is ITileCollectionSource { CollectionBadges.Count: > 0 } collections)
+        {
+            DrawBadges(context, collections.CollectionBadges);
+        }
+    }
+
+    /// <summary>Diameter and gap of a membership dot, and the most dots drawn before "+N".</summary>
+    public const double BadgeSize = 6;
+    public const double BadgeGap = 3;
+    public const int MaxBadgeDots = 3;
+    private const double BadgeInset = 8;
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Color, IBrush> DotBrushes = new();
+
+    /// <summary>
+    /// The dot rectangles for <paramref name="count"/> badges on a cover of the given height: at most <see cref="MaxBadgeDots"/>, bottom-left,
+    /// above the progress bar and clear of the bottom-right corner (rating, dog-ear). Pure, so the placement is unit-tested.
+    /// </summary>
+    public static IReadOnlyList<Rect> BadgeDotRects(int count, double height)
+    {
+        int shown = Math.Min(count, MaxBadgeDots);
+        double top = height - BarHeight - BadgeSize - 5;
+        var rects = new List<Rect>(shown);
+        for (int i = 0; i < shown; i++)
+        {
+            rects.Add(new Rect(BadgeInset + (i * (BadgeSize + BadgeGap)), top, BadgeSize, BadgeSize));
+        }
+
+        return rects;
+    }
+
+    private void DrawBadges(DrawingContext context, IReadOnlyList<CollectionBadge> badges)
+    {
+        var rects = BadgeDotRects(badges.Count, Bounds.Height);
+        var outline = new Pen(BarTrack, 1);
+        for (int i = 0; i < rects.Count; i++)
+        {
+            var accent = badges[i].Accent;
+            IBrush fill = accent is Color color
+                ? DotBrushes.GetOrAdd(color, c => new SolidColorBrush(c).ToImmutable())
+                : ResolveBrush("PbAccentBrush", Colors.Orange);
+            context.DrawEllipse(fill, outline, rects[i].Center, BadgeSize / 2, BadgeSize / 2);
+        }
+
+        if (badges.Count > MaxBadgeDots)
+        {
+            var last = rects[^1];
+            var text = new FormattedText($"+{badges.Count - MaxBadgeDots}", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                Typeface.Default, 9, Brushes.White);
+            context.DrawText(text, new Point(last.Right + BadgeGap, last.Center.Y - (text.Height / 2)));
         }
     }
 

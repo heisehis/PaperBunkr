@@ -293,10 +293,10 @@ public static class HomeFeedResolver
     /// collection with nothing in it yet has nothing to show off.</summary>
     public static IReadOnlyList<Collection> GetHomeCollections(PaperbunkrDbContext context, int limit = 10)
     {
-        return context.Collections
-            .Include(c => c.Items)
-            .Where(c => c.Items.Count > 0)
-            .OrderBy(c => c.SortOrder)
+        return Paperbunkr.Data.Collections.CollectionOrdering.Apply(
+                context.Collections
+                    .Include(c => c.Items)
+                    .Where(c => c.Items.Count > 0))
             .Take(limit)
             .ToList();
     }

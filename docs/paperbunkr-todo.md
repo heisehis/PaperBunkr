@@ -26,6 +26,25 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **2026-11-12 — Continuity map M4 Completeness and M5 Structure links implemented, pending on-screen review (working tree; base HEAD `28e60a1`, no new commit; built on the still-uncommitted Smart fill and Series structure D1–D3 code at the user's request):** M4 saves each event's provider issue list (new `EventArcSnapshots` table, written by Smart fill runs, guided event creation and a new **Check for missing issues** action), shows the issues you don't own as dashed "Not in your library" / "In your library" cards with **Show missing** (remembered, default off), adds them to Wanted (one confirmation when new series would be tracked, **Undo add to Wanted**), offers **Add to event** for owned non-members, and runs a **Possible gaps** check when there's no provider list; ghosts never count as read and never open in the reader. M5 adds **Featuring** (dim or hide everything without a character or team), character faces on cards, **Colour by** writer / artist / read state with a legend, creator-run and story-arc brackets under lanes, and **Open on map** from character and team pages and the continuity Overview's Key characters/teams. Migration `AddEventArcSnapshots` was tested on synthetic databases only. New tests: Data `EventMissingDataTests` (11), App `EventMissingTests` (9) and `EventMapStructureTests` (10), all passing. Not verified: a live provider fetch, a real Add to Wanted, the entry points and the look on screen. Specs: [M4](superpowers/specs/2026-11-11-continuity-map-completeness-design.md), [M5](superpowers/specs/2026-11-11-continuity-map-structure-links-design.md).
+
+> **2026-11-12 — Continuity map M3 finished, M6a List + Atlas and M6b Polish implemented, pending on-screen review (working tree; base HEAD `28e60a1`, no new commit):** M3's Matrix, roll-call and progress code (written by Codex) got its missing tests and docs. M6a adds the map's **List** view (sections, jump bar, pinned header, Read this section, Next up) and the continuity **Atlas** (events against the years, read fill, prequel/sequel connectors, loose-issue band, Undated menu). M6b adds the "read so far" line with a remembered **Hide progress line** toggle (migration `AddEventMapProgressLine`, default on; tested on a synthetic database, not applied to the user's), the pulsing **You are here** ring, event cover art on continuity ruler bands, the outward trace on selection, and **Save as image** for the Map and Matrix through a new shared `ControlImageExporter` that the Insights poster export now uses. New tests: `EventMapMatrixModeTests` (6), `EventListAtlasTests` (13), `EventMapPolishTests` (10), Data `AddEventMapProgressLineMigrationTests` (3), all passing; the map, Continuity, Insights, real-window keyboard and lint run passed 376/378, the two failures pre-existing and outside this work (`FamilyButtonsCarryNoSizeOverrides` in the two ComicVine dialogs, and `InsightsScreenViewModelTests.Refresh_WithFinishedSeriesAndRealRelation_PopulatesRecommendations`, which fails on the uncommitted `RecommendationResolver` change from the Series structure work). List/Atlas/progress-line renders in Default, Daylight and Matrix were checked by eye. Not verified: anything on screen (pulse, trace, pan/zoom feel), Narrator, a real exported PNG, band art with real covers. M4 (needs the Smart fill code committed) and M5 (needs Series structure D1–D3 committed) are not built. M1's sign-off and old-surface removal remain pending. Specs: [M3](superpowers/specs/2026-11-11-continuity-matrix-rollcall-design.md), [M6a](superpowers/specs/2026-11-11-continuity-list-atlas-views-design.md), [M6b](superpowers/specs/2026-11-11-continuity-map-polish-design.md).
+
+> **2026-11-11 — Continuity map M2 Layout implemented, pending on-screen review (working tree; base HEAD `28e60a1`, no new commit):** relay waves, one-per-column preference, short-lane folding, Hide read, and user-relation spine selection are wired through event and continuity maps. Map/Continuity and relevant UI lint checks passed 306/306, followed by a final map/Continuity run of 282/282; Data relation/connector and synthetic migration checks passed 53/53 plus two follow-up checks. `AddEventMapRelayPacking` defaults existing rows to packed and was not applied to the user's database. Theme renders were inspected; screen reader, physical input and interactive review remain. M1's user sign-off and old-surface removal remain pending. See the [M2 design](superpowers/specs/2026-11-11-continuity-map-layout-design.md).
+
+> **2026-11-11 — Continuity map M1 Room implemented, pending on-screen review (working tree; base HEAD `28e60a1`, no new commit):** the drawn map, smooth zoom and Fit, overview, slim header and rail, floating/docked inspector, and F11 maximize are in place. The targeted map, Continuity, real-window keyboard and relevant style/lint run passed 300/300 (excluding the existing `FamilyButtonsCarryNoSizeOverrides` failure in the unrelated ComicVine dialogs); the settings migration passed against a synthetic existing database and was not applied to the user's database. Theme/zoom renders were generated. The 2,101-card headless Debug bitmap median was 5.77 ms in the passing run and 9.07 ms in an earlier run, so real interactive performance still needs review. Physical pinch, Narrator and on-screen feel checks remain; the old surface is retained until the user's sign-off as required by the [plan](superpowers/specs/2026-11-11-continuity-map-room-plan.md).
+
+> **2026-11-10 — Whole Series structure/discovery spec implemented (working tree; base HEAD `28e60a1`, no new commit):** supersedes the foundation-only status below. Completed Step 0, D1.1–D1.10, D2–D4 and the CE Library groupers from `docs/superpowers/specs/2026-11-10-series-structure-and-discovery-plan.md`. Entity pages now have images/custom-reset support, all kind-specific cards, continuity filtering, ordered queues and normal saved lists; Detail/credit/reader chips and continuity strips link them together. Creator runs and story arcs have shared progress/Read/Save headers in comic layouts and manga chapter lists. Manga infers no arcs from titles and offers Creator runs only when useful. Recommendations share the ten-signal engine across Detail/Home/Insights, with 200 fully scored candidates and multi-reason explanations. Edited issue publication metadata overrides legacy series values. Writer and Main character/team group the entire field, matching CE; the separate column browser stays an unscheduled gap. Metron profile and credit IDs were checked against authoritative server serializers; no authenticated provider call was used.
+>
+> **Verification:** final targeted results are in design §9. Expanded selections passed **103/103 Data** and **394/394 App**, including the 10k-issue performance fixture. A final rebuilt UI/render/style/lint selection passed **49/49** after the progress-bar theme correction. Earlier foundation scan/editor/queue checks also passed. App renders cover Default/Daylight/Matrix at 1366×768 and entity reflow at 1000×768; MainWindow tests exercise refresh/history. Final runs skip analyzers and App slow cases, and exclude the pre-existing scraper-dialog button-height lint failure. Native Narrator/high-contrast/DPI and cross-platform checks remain release validation. No migration was applied to the user's database. No commit or full-suite claim.
+
+> **2026-11-10 — Series structure/discovery foundations continued (working tree; base HEAD `28e60a1`, no new commit):** resumed after Claude stopped at D1.5 in `docs/superpowers/specs/2026-11-10-series-structure-and-discovery-plan.md`. Fixed the reader-queue test compile blocker and passed the queue snapshot into the preloader worker. Finished the versioned four-index foundation's removal of the old startup character-only backfill; rebuilds now clear stale entries for blanked metadata, honor cancellation and stamp the version only on success. Hardened profile/image fallback, custom-image provenance and retry stamps; HTTP 404 from ComicVine is a miss. Added D1.6's entity-page data projection (appearance/read counts, natural/date order, continuity filtering, chronological events, series/year/creator-role cards). Corrected the spec's CE Writer-grouping interpretation: CE groups the complete string, not each writer or the first writer.
+> **Verified:** 50/50 focused Data cases and 189/189 focused App cases passed on .NET 10, including migration, all four indexes, canned provider responses/404, image fallback/retry, sweep batching, scan/metadata sync, both issue editors, queue navigation and preloading. App and compiled XAML built successfully; `git diff --check` passed. Final builds skipped analyzers (`RunAnalyzers=false`); no full fast/slow suite, live provider schema check or native UI review is claimed. **Next: D1.7 entity-page VM/view, then D1.8 entry points and D1.9 Continuity links.** D1 UI, D2–D4 and the Library groupers are not complete. The user's database was not migrated by this session.
+
+> **2026-11-04 — Event Smart fill (working tree; approved spec/research `28e60a1`):** implemented explicit single-event/editor/selected-event filling, source comparison, field-level clearing protection and provenance, local history with revision-checked undo, partial/uncertain/provisional publication dates, and compatible GCD schema-2 extraction/installation. Existing values and nonempty type/tag collections stay unchanged; incidental member keywords are not event tags. Provider issue lists do not change local memberships or reading order. The existing automatic description/cover completion and event merge paths respect the new protection; date consumers read partial endpoints. Plan: `docs/superpowers/specs/2026-11-04-event-smart-fill-plan.md`.
+> **Verified:** 220/220 selected Data cases and 105/105 selected App cases passed, including rollback/cancellation, legacy exact-date synchronization over partial endpoints, editor save/cancel/clear, GCD installation, six Default/Daylight/Matrix renders at 750/1100 px and a headless real-MainWindow Escape check. App/compiled XAML built and `git diff --check` passed. The final App run excludes the previously confirmed baseline lint failure for four Height overrides in the two untouched Scraper dialogs. The schema-2 zip/manifest/report are saved in `C:/Users/DeeDee/Downloads/Paperbunkr-GCD-v2-2026-09-15`, not published. Implementation remains uncommitted working-tree work; this entry does not claim a full fast/slow suite, release or native accessibility sign-off.
+> **GCD delivery:** built and verified a 44.0 MB schema-2 package from the user's 2026-09-15 full dump (582 arcs, 142 descriptions); CRC, SHA-256 and SQLite checks passed. Package and versioned manifest are local, not published. The old data manifest is unchanged, and schema-1 extracts remain readable. Source implementation is not committed or released by this note.
+
 > **2026-10-31 — v0.8.2-beta release preparation (source `1d94298`, PR #107):** committed the
 > accumulated Books, CBL review/refresh, tracker retry, Plugin API 4.5, series connector and related
 > source/test/documentation changes. This supersedes the older "uncommitted" labels as Git status
@@ -75,7 +94,7 @@ this file itself already did once (see the note below).
 
 > **Item 5 — Guided View detection performance implemented in the working tree (2026-10-26; no commit).** Cold panel detection now runs through a per-reader single-flight queue, serializes inference, drops stale queued pages, and records p50/p99 analysis duration in the existing reader performance overlay. Smart double-click preserves its click while detection runs and applies it only if the page/view still matches; “Show detected panels” and “Report bad panel detection” use the async path, with reports keeping an owned page image across navigation. **Verified:** main `Paperbunkr.App` Debug build succeeded (0 errors; existing ImageSharp license warning); `git diff --check` passed. Test suites and native on-screen/accessibility review were not run. Specs/plans: `docs/superpowers/specs/2026-10-26-guided-view-performance-{design,plan}.md`.
 
-> **2026-10-26..28 — Books arc and Books section redesign built in the working tree (no commit); status lines in the design docs corrected 2026-10-28.** Source confirmed present for: Slice 1 data foundation (`AddBookMetadataFoundation`), 2a browse shelves (`AddBooksBrowseViews`, `BooksBrowseQuery`, `BookShelfService`), 2b Detail, 3a jump-back, 3b typography aids, 3c annotations, 4a Calibre import (`Paperbunkr.Data/Calibre/*`), 4b dictionary (`Services/Dictionary/*`), 4c OPDS (`Services/Opds/*`, `OpdsCatalog`), 4d read aloud (`Services/Speech/BookReadAloudPlan`), the paged/scroll reader modes (`BookPageMap`), and the three-slice section redesign (Reading Room + Shelf). Also built the same days: You-vs-Community + chapter alignment (spec "As built"), ComicRack import gaps, and continuity unplaced events + CBRO overlap notes (`AddEventOrderOverlapNotes`). **Verified:** the paged/scroll modes, popup, drawers, and the redesign's reader/Detail fixes were user-checked on screen; the rest has unit/headless tests only. New migrations (Books slices, tracker retry queue, event-order notes) are not yet applied to the user's dev database. Still not built: comic reader Slice H, Metadata Model Phase 7 (deferred), and the two Plugin API items cut by decision (7 scoped file system, 12 plugin-to-plugin registry). The rest of the 2026-09-20 plugin pitch, including the live log pane, was built as Plugin API 4.5 on 2026-10-28 (see the entry above).
+> **2026-10-26..28 — Books arc and Books section redesign built (committed in v0.8.2-beta, `1d94298`, 2026-10-31); status lines in the design docs corrected 2026-10-28.** Source confirmed present for: Slice 1 data foundation (`AddBookMetadataFoundation`), 2a browse shelves (`AddBooksBrowseViews`, `BooksBrowseQuery`, `BookShelfService`), 2b Detail, 3a jump-back, 3b typography aids, 3c annotations, 4a Calibre import (`Paperbunkr.Data/Calibre/*`), 4b dictionary (`Services/Dictionary/*`), 4c OPDS (`Services/Opds/*`, `OpdsCatalog`), 4d read aloud (`Services/Speech/BookReadAloudPlan`), the paged/scroll reader modes (`BookPageMap`), and the three-slice section redesign (Reading Room + Shelf). Also built the same days: You-vs-Community + chapter alignment (spec "As built"), ComicRack import gaps, and continuity unplaced events + CBRO overlap notes (`AddEventOrderOverlapNotes`). **Verified:** the paged/scroll modes, popup, drawers, and the redesign's reader/Detail fixes were user-checked on screen; the rest has unit/headless tests only. New migrations (Books slices, tracker retry queue, event-order notes) are not yet applied to the user's dev database. Still not built: comic reader Slice H, the full Metadata Model Phase 7 schema (a minimal `CollectionContent` shipped 2026-10-26), and the two Plugin API items cut by decision (7 scoped file system, 12 plugin-to-plugin registry). The rest of the 2026-09-20 plugin pitch, including the live log pane, was built as Plugin API 4.5 on 2026-10-28 (see the entry above).
 
 > **Release preparation (2026-10-24, v0.8.0-beta; source `0be8125`, focus-ring fix `a003b76`):**
 > the accumulated source, artwork, installer and documentation changes are committed on
@@ -4283,3 +4302,192 @@ series relations (it only groups by AlternateSeries/SeriesGroup), so this is Pap
   now built on the thread pool like More Like This, one decode per series. `DetailTabsViewModelTests` + reactions + catalog (140) pass; built into `bin`.
 - **Not done.** Not seen on screen. The first real Metron run stopped when the app was closed (510 series asked, 48 associations saved);
   the next run picks up from there, since checked series are stamped. Metron associated series not in the library aren't shown.
+
+## 2026-11-06 - Cosmetics pitch 3, Slice 1: Edit Collection dialog
+
+Not committed, **not seen on screen**. Spec `docs/superpowers/specs/2026-11-06-collection-dialog-polish-design.md`, plan `...-plan.md`, pitch
+`...-cosmetics-pitch-3.md` (30 items; Slices 2-5 not started).
+- **Built (items 1, 2, 3, 6, 7 minus markdown, 8):** live preview card in Appearance (buffered name/accent/cover/count, follows member order);
+  preset swatches with a selected ring, a "+" swatch opening a flyout (new code-only `Controls/HsvColorPicker` + hex field, Enter applies,
+  Esc closes) and a custom colour shown as a seventh swatch; advisory "Low contrast on this theme" line (3:1 vs `PbSurface2`); member rows with
+  lazy covers (`LibraryTile.FromMember`), a drag grip (`Views/CollectionMemberRowDrag`) and a Sort menu (Title A-Z / Z-A / Type, manual rows only,
+  buffered so Cancel undoes it); bordered description with a soft 500-character counter; Appearance/Members open and Rules/Related
+  (the three rule cards and two related cards merged) collapsed, remembered for the session only. No migration.
+- **Deviations from the spec:** (1) the "collection header renders the description with MarkdownLite" part is **not built**: the Library has no
+  collection header showing the description at all (the spec's premise was stale); it moves to pitch item 9 (banner header), and the dialog's
+  markdown hint was removed so it doesn't promise it. (2) The preview is inline XAML in the dialog, not a separate `CollectionPreviewCard`
+  control. (3) The member list is not virtualized (inline `ItemsControl`); covers are lazy, so a 150+ member collection is the thing to check.
+- **Verified:** build clean with XAML compile; 81 targeted tests pass (new `AccentColorInputTests`, `CollectionDialogPolishTests`,
+  `CollectionDialogRenderTests` + the existing `CollectionPropertiesScreenViewModelTests`); the dialog rendered headlessly in default, daylight and
+  matrix and checked by eye. Lint: all pass except the known `FamilyButtonsCarryNoSizeOverrides` (ComicVine dialogs, not touched here).
+- **Not verified:** drag on screen, the colour flyout interaction, the chevron of the two open sections (it was blank in the headless render of the
+  default and daylight themes while the closed ones drew; the same idiom works in the Wanted queue), keyboard walk-through, 150+ members, Narrator.
+
+## 2026-11-06 - Cosmetics pitch 3, Slice 2: collection identity
+
+Not committed, **not seen running by the user** (only headless renders). Spec `docs/superpowers/specs/2026-11-06-collection-identity-design.md`, plan `...-plan.md`.
+- **Built:** migration `AddCollectionIdentity` (`Collection`: `IconGlyph`, `CoverStyle`, `IsPinned`, `CoverMemberItemId`; `AppSettings`: `ShowCollectionProgress`
+  default off, `CollectionRowDensity`, `CollectionDotShape`; `AppSettings` columns left in `Down`); `CollectionOrdering` (pinned first) used by the Library sidebar,
+  Books list, Home shelf and Show in list; `CollectionService.SetPinned/SetIdentity`; `GetCoverHint` honours a chosen cover member (stale id falls back);
+  `CollectionProgressResolver` (one grouped pass; series issues "started" = `LastPageRead > 0`, standalone issue, finished book, rule-matched members); dialog: glyph picker
+  (24 curated FluentIcons, all checked to be real symbols), pin toggle, cover style (Auto/Single/Mosaic/Fan), "Use as the cover" star per manual row, "Auto (Title)" label,
+  all buffered; `Controls/FanCoverStack` (code-only) + `PosterTile` `FanSources`/`RingFraction`; Home card honours the style (manual cover overrides it); sidebar row: glyph or
+  circle/squircle marker, pin icon, opt-in `ProgressRing`, hairline before the first unpinned row, hover Pin action, hover-only drag grip (`CollectionSidebarRowDrag`, within a
+  group only), Move up/down stop at the group boundary; Preferences > Appearance: progress ring toggle, row density, marker shape.
+- **Deviations:** (1) the dialog preview card shows the single/auto cover only - the Mosaic/Fan style shows on Home cards, not in the preview; (2) Compact density only trims
+  the row's own margin (no new padding rules - the shared `sideItemButton` is not restyled); (3) no Preferences view-model test (that class is Slow) - the settings round-trip
+  is covered by the migration test and the sidebar tests; (4) the Books screen only got the pinned ordering, not glyph/pin marks.
+- **Verified:** build with XAML compile; Data tests 90 pass (`CollectionIdentityDataTests`, `AddCollectionIdentityMigrationTests` + existing Collection classes); App targeted
+  274 run, 273 pass (new `CollectionSidebarTests`, `CollectionIdentityDialogTests`, `HomeCollectionCardStyleTests`, `CollectionSidebarRenderTests`, `CollectionDialogRenderTests`,
+  `AccentColorInputTests`); the one failure is the known `FamilyButtonsCarryNoSizeOverrides` in the ComicVine dialogs. Headless render of the real main window sidebar and of the
+  dialog (default/daylight/matrix) checked by eye.
+- **Not verified:** drag (sidebar and members) on screen, the hover grip/pin action, Compact density, the Fan cover and the Home ring, Preferences controls live-updating the
+  sidebar (it reloads on the next Library load), keyboard walk-through, Narrator, progress query cost on a large library.
+
+## 2026-11-06 - Cosmetics pitch 3, Slice 3: collection surfaces
+
+Not committed, **not seen running by the user** (headless renders only). Spec `docs/superpowers/specs/2026-11-06-collection-surfaces-design.md`, plan `...-plan.md`.
+Item 16 (collection tabs) was **dropped** (there are no such tabs) and item 15 (group by collection) **deferred** (many-to-many, no axis).
+- **Built:** migration `AddCollectionBadges` (`AppSettings.ShowCollectionBadges`, default off; Down leaves the column); **banner** (`Views/CollectionBanner`, new `Auto` row in the
+  Library `RootGrid`, root-level children moved to row 2) for the active collection: blurred cover under a scrim and the accent, glyph + name, stat chips, "N% read" (computed even when the
+  sidebar ring is off), markdown description via `MarkdownView` capped at three lines with Show more/less, Edit and Pin, single-line under 700 px window height; **empty state**
+  (`Views/CollectionEmptyState`) for a collection with no members, the generic empty message yields to it; **membership dots** (`CollectionMembershipResolver`, `CollectionBadgeStore`
+  push-cache, `ITileCollectionSource` on `IssueListRow` and `SeriesCardSample`, drawn inside `TileCosmeticsOverlay`, hidden inside a collection, Preferences toggle); **Home hero**
+  (`CollectionContinueResolver` in the App layer because the number ordering lives there, `Views/Home/CollectionHeroCard`, hero first on the shelf, Continue chip opens the next
+  unread issue). `CollectionProgressResolver` now limits its per-series query to the series involved.
+- **Deviations:** (1) the dots are fed through a static `CollectionBadgeStore` (like `CosmeticThumbnailSettings`), not settable properties on the samples, so no projection code changed;
+  (2) the issue tile type in the Library is `IssueListRow`, not `IssueCardSample` (the spec named the latter); (3) the banner spans all three columns above the preview panel;
+  (4) the banner's progress is read with a small query on the UI thread when it rebuilds (one filtered query), not in the background load.
+- **Verified:** build with XAML compile; targeted App run 306 tests, 305 pass (the one failure is the known ComicVine `FamilyButtonsCarryNoSizeOverrides`); Data collection classes pass;
+  new tests: `CollectionBannerTests`, `CollectionBadgeSourceTests`, `TileCosmeticsOverlayBadgeTests`, `CollectionContinueResolverTests`, `HomeCollectionHeroTests`, Data
+  `CollectionMembershipResolverTests` + `AddCollectionBadgesMigrationTests`; real-window headless renders of the banner (with description) and the empty card checked by eye.
+- **Not verified on screen:** the blur behind the banner, Show more/less, links in the description, the short-window mode, the dots on real covers (bottom-left spacing vs. the spine),
+  the Home hero's look (the headless render caught the section mid-entrance animation), Continue opening the reader, keyboard order hero-then-cards, Narrator.
+
+**2026-11-06 fix (Slice 3 banner, found by the user on screen):** the Library collection banner filled the whole content area when the collection had a real cover - the blurred
+cover images sat in an `Auto` row and their intrinsic (tall) size drove the row height. The background layers are now sized to the banner's text content
+(`Height` bound to `BannerContent.Bounds.Height`). Regression test `CollectionBannerRenderTests.ATallCover_DoesNotMakeTheBannerGrow` (800x1200 cover; banner stays 40-260 px). Re-render looks right; the user has not re-checked it on screen.
+
+## 2026-11-06 - Cosmetics pitch 3, Slice 4: personalization
+
+Not committed, **not seen running by the user** (headless renders only). Spec `docs/superpowers/specs/2026-11-06-personalization-design.md`, plan `...-plan.md`.
+- **Built:** migration `AddPersonalization` (`AppSettings.FontScale` 100, `HeadingFontFamily`, `CardElevation` 1, `SidebarStyle`, `FocusRingThickness` 1; Down leaves the columns);
+  `Services/PersonalizationMath` (Corners curve 0/50/100 -> square/theme/double, closest-match read-back, text scale to half points, ring stroke); `Services/ThemeService.Personalization.cs`
+  folds text scale, heading font, card shadows and ring thickness into the **same apply transaction** as the theme (`ContributeToPlan` / `AddGlowToPlan`), so a theme switch, an accent
+  change and a fresh start all keep them; `PersonalizationRuntime` publishes the sidebar style for a bound class (no runtime `Style` removal); new resources `PbPosterShadow(Hover)`,
+  `PbShelfShadow(Hover)`, `PbCoverShadow` replace the literal cover shadows (fallbacks = the old values); `.sidebarPill` / `.sidebarTint` state styles on the contextual sidebar;
+  `ViewModels/PersonalizeViewModel` + `Views/Preferences/PersonalizeGroup` (accent swatches + HSV flyout + "Theme's own", Corners slider writing the three Global `metrics.radius*`
+  overrides with a "Custom" state when Customize edits them, Text size, Heading font, Card depth, Sidebar selection, Focus ring, Reset personalization, live sample strip) above Customize;
+  the old hex-box accent row is gone (the accent is still `AccentOverrideHex`, one value with Customize's "All themes" accent); Preferences search entry "Personalize".
+- **Deviations:** (1) card depth applies to the cover cards (Library `Border.cover`, poster/shelf covers, hero tiles), not `Border.card` (which never had a shadow); (2) the ring thickness
+  also scales the hover glow (same `PbGlowRing`) - the row's description says so; (3) hover edges now use the theme's glow colour instead of a fixed orange; (4) the sidebar style
+  covers the contextual sidebar rows (`sideItemButton`, collection/smart/event rows), not the Preferences nav; (5) the heading font overrides the display font too; (6) the Corners slider is debounced (180 ms).
+- **Verified:** build with XAML compile; Data `AddPersonalizationMigrationTests`; App: `PersonalizationMathTests` (24), `ThemeServicePersonalizationTests` (9, incl. fresh start and theme switch),
+  `PersonalizeViewModelTests` (7), `PersonalizeRenderTests`, `CollectionSidebarRenderTests` (Pill/Tint class), theme goldens unchanged, focus-ring clipping tests, `PreferenceIndexTests`, accent/theme
+  tests of `PreferencesScreenViewModelTests`; targeted run 367/368 (only the known ComicVine `FamilyButtonsCarryNoSizeOverrides`). Real bugs caught by tests: the Corners read-back picked 99 instead
+  of 100; the Reset button's focus ring was clipped by the group. Renders (default/daylight/matrix, 110 %) checked by eye.
+- **Not verified on screen:** each control live in the app, Corners 0 / 100 on all three themes, 110 % text with the Library toolbar and state row at 1366x768, Pill/Tint in the real sidebar,
+  Flat/Lifted covers, Thick ring, Reset, persistence across a restart.
+
+**2026-11-06 follow-up (Slice 4, redundant settings removed at the user's request):** (1) Customize hides its **Accent** and **Corner radius** rows while the scope is "All themes"
+(Personalize owns those values) with a one-line note, and keeps them for "This theme" / "This variant"; (2) the **Font** group is gone - "Body font" (same `SelectedFontFamily`, with its
+sample line) is now in Personalize beside Heading font; (3) **Accent glow** left Cover cosmetics and is Personalize's **Ring strength** (same glow tier, with its four samples) next to
+Focus ring (width). Reset personalization now also resets the body font and ring strength. Also fixed: the heading-font list offered "System Default", which would have been sent to the
+theme as a font name. Search index updated. Verified: Personalize/Customize/index/focus-ring tests and the accent/font/glow tests of the Preferences class pass; render checked. Not seen on screen.
+
+## 2026-11-06 - Cosmetics pitch 3, Slice 5: looks and presets
+
+Not committed, **not seen running by the user** (headless renders only). Spec `docs/superpowers/specs/2026-11-06-looks-and-presets-design.md`, plan `...-plan.md`. No migration.
+- **Built:** three presets at the top of Personalize (`Services/LookPresets`: Quiet, Collector, Vivid; cards with a drawn corner/shadow/ring sample, "Look: <name> / Custom" label, Undo);
+  `ThemeService.ApplyLook` applies corners, card depth, sidebar selection, ring width and ring strength with **one** theme re-apply; presets never touch the accent, fonts or text size.
+  Export/import (item 29 finished): the customizations file gains a `personalization` block (`Services/PersonalizationSnapshot`, `formatVersion` 1; accent, text size, heading/body font, card depth,
+  sidebar, ring width, ring strength), buttons renamed "Export my look…" / "Import a look…" and shown in both Customize and Personalize. Old files import as before; a newer block is skipped
+  with a note. "Collection dots" moved from Preferences > Cover cosmetics to the Library View menu (Poster/Panorama), same `AppSettings.ShowCollectionBadges`, toggling reloads the Library.
+- **Dropped (decided in the grill):** item 20 per-library accent (there are no separate libraries; overrides are per theme), item 25 toolbar button style (would restyle the shared `iconButton`
+  family the design language forbids), item 26 background treatment (theme materials and the Home/Detail backdrops already cover it).
+- **Verified:** `LookPresetsTests`, `ThemeServicePersonalizationTests` (one apply per look, export/import round trip, old file, newer block, junk values, old deserializer reads a new file),
+  `PersonalizeViewModelTests` (presets, Undo incl. Customize-edited radii, Custom), `PersonalizeRenderTests`, `CollectionBannerTests` (dots toggled from the Library VM persist and refill):
+  44/44; theme goldens, `PreferenceIndexTests`, `LibraryLensTests`, focus-ring clipping, `ThemeCustomizationViewModelTests` and the lint trio: 66/67 (only the known ComicVine
+  `FamilyButtonsCarryNoSizeOverrides`). Bug caught on render: the first preset card's focus ring was clipped by the scroller (row margin added).
+- **Not verified on screen:** each preset live on the three built-in themes, Undo, the Export/Import round trip through the real file dialogs, the Collection dots row in the View menu.
+
+## 2026-11-06 - Collection icons (heroes, publishers, My icons) and slim banner
+
+From the user's first on-screen look at cosmetics pitch 3. Not committed, **not seen running by the user** (headless renders only). Spec
+`docs/superpowers/specs/2026-11-06-collection-icons-and-slim-banner-design.md`, plan `...-plan.md`. One migration, `AddCollectionBannerSlim` (no-op Down).
+- **Built:** `Collection.IconGlyph` now holds four kinds (`Models/CollectionIcon`: plain symbol name, `hero:`, `publisher:`, `file:`; every old value still valid);
+  `Models/HeroGlyphs` (24 game-icons.net shapes, CC BY 3.0, credited in THIRD-PARTY-NOTICES.md; emblem lookalikes excluded); `Services/CollectionIconFolder` +
+  `CollectionIconImages` ("My icons" = `%APPDATA%\Paperbunkr\collection-icons`, SVG/PNG up to 2 MB, cached, off the UI thread; `SvgMarkRenderer.RenderFile`);
+  `Services/CollectionIconResolver` (deleted file / logo-less publisher -> the accent dot); `Controls/CollectionGlyphView` draws every kind at the sidebar, banner,
+  empty card and dialog; the Edit Collection picker has Symbols / Heroes / Publishers (library publishers with a logo, the collection's most common first) / My icons
+  (Open icons folder, Refresh, skipped-file count). Banner: slim one-line bar once the list is scrolled past 24 px (full again only at the top) in every view mode, a
+  chevron pins it slim (`AppSettings.CollectionBannerSlim`), two-line description, the 700 px `.short` rule removed.
+- **Decided not to:** bundle DC/Marvel character emblems (trademarks; the user's reference sheets have no licence) - the user drops their own into My icons.
+- **Verified:** `CollectionIconTests`, `HeroGlyphsTests`, `CollectionIconImagesTests`, `CollectionIconPickerTests`, `CollectionGlyphViewRenderTests`, `CollectionBannerTests` (slim threshold,
+  pin remembered, new collection opens full), `CollectionBannerRenderTests` (real window: scrolling the grid makes the banner 61 px, back at the top 145 px), `CollectionDialogRenderTests`
+  (all sections, focus rings), `CollectionIdentityDialogTests`, Data `AddCollectionBannerSlimMigrationTests`; lint trio, goldens, Preferences focus rings, Library focus rings,
+  `PreferenceIndexTests`, `LibraryLensTests`: all pass except the known ComicVine `FamilyButtonsCarryNoSizeOverrides`. Bugs caught by renders: the banner could never shrink
+  (blur layer bound to a stretched content height) and `UserControl.slim` did not match the banner.
+- **Not verified on screen:** icons of each kind in the real sidebar/banner, a real SVG/PNG in My icons, publisher logos at 14 px in the sidebar, the slim bar while scrolling each
+  view mode at 1366x768, the chevron.
+
+## 2026-11-09 - Theme gallery layout and an 18 + 18 theme roster (implemented, theme tests pass, not seen on screen)
+
+Spec `docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md`, plan `...-plan.md` (the spec's "Implementation notes" record each slice and its
+deviations). Uncommitted.
+
+- **Slice 1, layout:** Appearance > Theme is two panes that scroll on their own (gallery behind a Dark / Light / Accessibility / Installed switch, four
+  theme-drawn tiles a row; fixed rail with inspector, variants, theme options, Auto switch). New **Personalize** tab (Personalize + Customize, live
+  preview pinned right). Selecting a theme flips flags in place instead of rebuilding the gallery inside the tile's Click.
+- **Slice 2, groundwork:** Cool & Technical, Vibrant & Pop, Vintage Paperback, Overcast, Graphite · Light retired; `ThemeKeyMigration` moves saved
+  keys (accent carried, OLED → dark + True black) and raises one Activity Center note. OLED variants hidden from the gallery. Theme components gain
+  `borderThickness` (≤ 3) and button `shadow`; `surfaces.selection` may be a texture. `tools/themes/generate_textures.py` (deterministic). Windows 11,
+  Matrix and the accessibility pair rewritten as v2 keeping `legacy.<key>` ids. Fixed: `ThemeCatalog` cached failed built-in reads.
+- **Slice 3, roster:** light/dark halves for Abyss, Tokyo Midnight, Arcade, Crimson Ink, Matrix, Newsprint, Windows 11 and both accessibility themes;
+  new Golden Age, Screentone, Risograph, Blueprint, Dune (pairs) and Kraft. Gallery: 18 dark, 18 light, 4 accessibility. Values in
+  `tools/themes/build_roster_2026_11.py`; 20 new goldens; every built-in passes the strict readability check.
+- **Verified:** ~305 theme/appearance tests (goldens unchanged for every pre-existing look except Crimson Ink's intended grain), contact-sheet render.
+  **Not verified:** on screen; `XamlConsistencyLintTests.FamilyButtonsCarryNoSizeOverrides` fails only on the untracked `Scraper/ComicVine*ReviewDialogView.axaml`.
+
+## 2026-11-12 - Entity pages redesign: character, team, location, creator, publisher (implemented, tests pass, not seen on screen)
+
+Spec `docs/superpowers/specs/2026-11-12-entity-pages-redesign-design.md`, plan `...-plan.md`. Uncommitted (on top of the uncommitted Runs /
+map-button work already in these files).
+
+- **Page:** `HeroBand` header (cover collage), image shape per kind, main action in the header (Continue · next unread for characters/teams, Read in
+  order for locations/creators, Show in Library for publishers), ⋯ Manage (map, refresh profile, reset / change image), one segmented continuity
+  switch with counts, then tabs. The page scroller is the only scroller (no 320 px inner lists).
+- **Per kind:** Character/Team Overview (Often appears with, events preview, year chart, first appearance) · Appearances · Series · Events; Location
+  Overview (Who's been here, events set here, Seen by year) · Appearances · Series; Creator Career (run timeline with Read/Save flyouts, Often works
+  with) · Credits · Series, role chips narrowing every tab; Publisher Series (imprint chips) · Continuities · Characters (top 48).
+- **Shared pieces:** `EntityTile` (fixed height, monogram + inset cover when no portrait, menu instead of hover map button), `EntityPosterGrid`
+  (virtualizes against the page scroller), `YearColumnChart`, `EntityEventRow`, `CareerTimeline` + `FractionPanel`, `Styles/EntityPageChrome.axaml`.
+  Data: `EntityRelations` (co-appearances, collaborators, creator career, imprints); `EntityPageResolver.Build` takes a role and counts roles as
+  distinct issues.
+- **Elsewhere:** Continuity Key characters/teams use `EntityTile` with Open / Open on the map / Show in Library in the context menu. Detail entity chips
+  (already opening entity pages) get Open + Search library in their menu.
+- **Fixed:** empty Runs card on a location, "1 appearances", "2013 · · 1 issue", raw "CoverArtist", event rows misaligned, dead gap under actions.
+- **Verified:** Data `EntityRelationsTests` + `EntityPageResolverTests` (14); App `EntityPages/*` (text, kinds, controls, view model, a 3-theme render
+  of every kind at 1366×768), `SeriesStructureUiTests`, `ContinuityScreen*`, `TagPillContextMenuBuilderTests`, design-language lints.
+  **Not verified:** on screen; publisher logo heading (the headless harness draws no bundled logo); daylight hero gradient (the harness doesn't apply
+  the runtime theme's hero colours). `FamilyButtonsCarryNoSizeOverrides` still fails only on the committed Scraper review dialogs (pre-existing).
+
+## 2026-11-12 - LAN library sharing: "could not connect" hotfix (implemented, not seen on screen)
+
+User report: a second PC (v0.8.2) could not connect to a library shared from the laptop; the error only said the address could not be reached.
+Audit found no single proven cause (the laptop was not available), but four code-level ones, all fixed:
+- **Firewall:** nothing added a Windows Firewall rule; sharing relied on the "Allow access?" prompt, which leaves BLOCK rules for unticked
+  profiles (Public by default) or all profiles if dismissed. `installer/Installer.iss` [Run] now deletes every rule for `Paperbunkr.App.exe`
+  and adds inbound allow rules (TCP any port, UDP 5353) on Private + Domain; [UninstallRun] deletes them. Runs on silent auto-updates too.
+- **Wrong address:** mDNS advertised every adapter (Hyper-V/WSL/VirtualBox/169.254) and the browser took the first IPv4.
+  `Paperbunkr.Sharing/Discovery/LanAddresses.cs` picks real, up, private, gateway-bearing adapters; the advertiser uses it (fixes 0.8.2
+  browsers too); the browser prefers private IPv4 (`ShareDiscovery.AddressPreference`). The Sharing settings now show
+  "Other computers connect to <ip>:<port>" (`SharingSettingsViewModel.ConnectAddressText`).
+- **Silent errors:** `Paperbunkr.Sharing/Client/ConnectionFailure.cs` says why (no answer / refused / no route / TLS / 403 / status).
+- **IPv4 only:** `ShareServer` binds `ListenAnyIP` (dual-stack) for Any.
+- Public-network warning text now says the firewall blocks sharing there.
+
+**Verified:** Sharing.Tests 119/119 (new `ConnectionFailureTests`, `LanAddressesTests`); App `SharingSettingsViewModelTests` + lints pass except
+the pre-existing `FamilyButtonsCarryNoSizeOverrides` (Scraper dialogs). Built in a separate artifacts folder because a running app locked
+`src/Paperbunkr.App/bin`. **Not verified:** the installer was not compiled (no installer build requested); not tried with two real PCs.
+

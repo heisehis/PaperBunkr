@@ -1,6 +1,7 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Paperbunkr.App.Models;
 using Paperbunkr.Data.Collections;
 
 namespace Paperbunkr.App.ViewModels;
@@ -20,14 +21,32 @@ namespace Paperbunkr.App.ViewModels;
 public sealed partial class CollectionMemberRowViewModel : ObservableObject
 {
     private readonly Action<CollectionMemberRowViewModel> _onRemove;
+    private readonly CollectionMember _member;
+    private readonly Action<CollectionMemberRowViewModel>? _onUseAsCover;
+    private LibraryTile? _tile;
 
-    public CollectionMemberRowViewModel(CollectionMember member, Action<CollectionMemberRowViewModel> onRemove)
+    public CollectionMemberRowViewModel(CollectionMember member, Action<CollectionMemberRowViewModel> onRemove, Action<CollectionMemberRowViewModel>? onUseAsCover = null)
     {
+        _member = member;
         CollectionItemId = member.CollectionItemId;
         DisplayTitle = member.DisplayTitle;
         KindLabel = member.Kind.ToString();
+        Kind = member.Kind;
         _onRemove = onRemove;
+        _onUseAsCover = onUseAsCover;
     }
+
+    public CollectionMemberKind Kind { get; }
+
+    /// <summary>
+    /// The row's cover, resolved on first read (the row template is the first reader, so an unrealized row of a 150+ member
+    /// collection never decodes anything) through the same <see cref="LibraryTile.FromMember"/> path the Library grid and Home shelf use.
+    /// </summary>
+    public LibraryTile Tile => _tile ??= LibraryTile.FromMember(_member);
+
+    /// <summary>True while a member is being dragged over this row - the drop line (accent) shows on it.</summary>
+    [ObservableProperty]
+    private bool _isDropTarget;
 
     public int? CollectionItemId { get; }
 
@@ -42,6 +61,20 @@ public sealed partial class CollectionMemberRowViewModel : ObservableObject
     public string KindLabel { get; }
 
     public string KindLabelDisplay => IsRuleMatched ? $"{KindLabel} · matches rule" : KindLabel;
+
+    /// <summary>True when this row is the collection's chosen cover (the automatic cover uses it); shown as a filled star.</summary>
+    [ObservableProperty]
+    private bool _isCoverMember;
+
+    /// <summary>"Use as cover" is offered on manual rows only: a rule-matched row has no <see cref="CollectionItemId"/> to point at.</summary>
+    public bool CanUseAsCover => !IsRuleMatched;
+
+    public string UseAsCoverLabel => IsCoverMember ? "Stop using as the cover" : "Use as the cover";
+
+    partial void OnIsCoverMemberChanged(bool value) => OnPropertyChanged(nameof(UseAsCoverLabel));
+
+    [RelayCommand(CanExecute = nameof(CanUseAsCover))]
+    private void UseAsCover() => _onUseAsCover?.Invoke(this);
 
     [RelayCommand(CanExecute = nameof(CanRemove))]
     private void Remove() => _onRemove(this);

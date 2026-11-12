@@ -43,6 +43,8 @@ public static class ScheduledTaskCatalog
     public const string MetronSync = "metron-sync";
     public const string SynopsisGenreSuggest = "synopsis-genre-suggest";
     public const string FindRelatedSeries = "find-related-series";
+    public const string EntityIndexRebuild = "entity-index-rebuild";
+    public const string EntityImageFill = "entity-image-fill";
 
     public static IReadOnlyList<ScheduledTaskDescriptor> All { get; } = Build();
 
@@ -59,6 +61,40 @@ public static class ScheduledTaskCatalog
                 string path = new BackupService().BackupNow();
                 return $"Backed up to {System.IO.Path.GetFileName(path)}";
             }, ct)),
+
+        // docs/superpowers/specs/2026-11-10-series-structure-and-discovery-plan.md D1.1: scans never updated the character, team, location and
+        // creator indexes before, so existing libraries need one full rebuild. A brand-new interval task has no last run, so it runs soon after
+        // launch; once AppSettings.EntityIndexVersion is current every later run does nothing.
+        new ScheduledTaskDescriptor(
+            EntityIndexRebuild, "Rebuild character and creator index",
+            "Rebuilds the index behind character, team, location and creator pages from your issues' credits. Runs once; afterwards scans and edits keep it up to date.",
+            ActivityJobKind.Other, Priority: 9, SchedulerResourceClass.Db,
+            TimeSpan.FromDays(1), DefaultEnabled: true, ScheduleMode.Interval,
+            static (handle, ct) => Task.Run(() =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                if (!EntityIndexSync.NeedsRebuild(context))
+                {
+                    return "Index is up to date";
+                }
+
+                EntityIndexSync.RebuildAll(context, new Progress<string>(detail => handle.Report(detail)), ct);
+                return "Rebuilt the character and creator index";
+            }, ct)),
+
+        // docs/superpowers/specs/2026-11-10-series-structure-and-discovery-design.md §3.3: a small daily batch of character, team and creator
+        // images from Metron, then ComicVine, at low priority inside Metron's rate limit and daily budget. Pages also fill themselves on open.
+        new ScheduledTaskDescriptor(
+            EntityImageFill, "Fill character images",
+            "Looks up images and short bios for up to 20 characters, teams, creators and locations a day, from Metron or ComicVine, and for manga creators from AniList or MangaDex. Only ones linked to those sites are looked up.",
+            ActivityJobKind.Other, Priority: 26, SchedulerResourceClass.Network,
+            TimeSpan.FromDays(1), DefaultEnabled: true, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                var result = await new EntityImageSweep().RunAsync(new Progress<string>(detail => handle.Report(detail)), ct);
+                return result.Describe();
+            },
+            UsesHeavyJobLane: false),
 
         new ScheduledTaskDescriptor(
             LibraryScan, "Scan comic library folders",

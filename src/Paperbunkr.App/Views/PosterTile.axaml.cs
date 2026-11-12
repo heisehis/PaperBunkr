@@ -69,10 +69,27 @@ public partial class PosterTile : UserControl
     public static readonly StyledProperty<bool> OutlinedProperty =
         AvaloniaProperty.Register<PosterTile, bool>(nameof(Outlined));
 
+    /// <summary>Two or three covers fanned like cards (the collection Fan style), or null.</summary>
+    public static readonly StyledProperty<IReadOnlyList<IImage?>?> FanSourcesProperty =
+        AvaloniaProperty.Register<PosterTile, IReadOnlyList<IImage?>?>(nameof(FanSources));
+
+    /// <summary>True while neither a mosaic nor a fan replaces the single cover. Kept in step with those two properties.</summary>
+    public static readonly StyledProperty<bool> ShowSingleCoverProperty =
+        AvaloniaProperty.Register<PosterTile, bool>(nameof(ShowSingleCover), defaultValue: true);
+
+    /// <summary>0..1 read progress drawn as a small ring in the corner (collection cards, opt-in); null hides it.</summary>
+    public static readonly StyledProperty<double?> RingFractionProperty =
+        AvaloniaProperty.Register<PosterTile, double?>(nameof(RingFraction));
+
+    public static readonly StyledProperty<string?> RingTextProperty =
+        AvaloniaProperty.Register<PosterTile, string?>(nameof(RingText));
+
     private bool _fillShown;
 
     static PosterTile()
     {
+        MosaicSourcesProperty.Changed.AddClassHandler<PosterTile>((tile, _) => tile.UpdateShowSingleCover());
+        FanSourcesProperty.Changed.AddClassHandler<PosterTile>((tile, _) => tile.UpdateShowSingleCover());
         ProgressFractionProperty.Changed.AddClassHandler<PosterTile>((tile, _) => tile.UpdateFill(animate: false));
     }
 
@@ -94,6 +111,32 @@ public partial class PosterTile : UserControl
         get => GetValue(MosaicSourcesProperty);
         set => SetValue(MosaicSourcesProperty, value);
     }
+
+    public double? RingFraction
+    {
+        get => GetValue(RingFractionProperty);
+        set => SetValue(RingFractionProperty, value);
+    }
+
+    public string? RingText
+    {
+        get => GetValue(RingTextProperty);
+        set => SetValue(RingTextProperty, value);
+    }
+
+    public IReadOnlyList<IImage?>? FanSources
+    {
+        get => GetValue(FanSourcesProperty);
+        set => SetValue(FanSourcesProperty, value);
+    }
+
+    public bool ShowSingleCover
+    {
+        get => GetValue(ShowSingleCoverProperty);
+        private set => SetValue(ShowSingleCoverProperty, value);
+    }
+
+    private void UpdateShowSingleCover() => ShowSingleCover = MosaicSources is null && FanSources is null;
 
     public bool ShowBookGlyph
     {

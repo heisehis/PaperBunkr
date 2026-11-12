@@ -79,6 +79,27 @@ public class PreferenceIndexTests
     }
 
     [Fact]
+    public void EveryAppearanceEntryNamesARealAppearanceTab()
+    {
+        var keys = new[]
+        {
+            Paperbunkr.App.ViewModels.PreferencesScreenViewModel.AppearanceTabKeys.Theme,
+            Paperbunkr.App.ViewModels.PreferencesScreenViewModel.AppearanceTabKeys.Personalize,
+            Paperbunkr.App.ViewModels.PreferencesScreenViewModel.AppearanceTabKeys.Covers,
+            Paperbunkr.App.ViewModels.PreferencesScreenViewModel.AppearanceTabKeys.Interface,
+        };
+
+        foreach (var entry in PreferenceIndex.Entries.Where(e => e.Section == PreferencesSection.Appearance))
+        {
+            Assert.Contains(entry.SubTab, keys);
+        }
+
+        // Personalize and Customize live on their own tab (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md Q2).
+        Assert.Equal("personalize", PreferenceIndex.Entries.Single(e => e.AnchorKey == "appearance.personalize").SubTab);
+        Assert.Equal("personalize", PreferenceIndex.Entries.Single(e => e.AnchorKey == "appearance.customize").SubTab);
+    }
+
+    [Fact]
     public void EveryEntryAnchorResolvesToATagInItsSection()
     {
         // Keyboard Shortcuts builds one group per input-service action group (docs/superpowers/specs/2026-10-03-input-service-design.md §9), so a plugin's actions get a section with no XAML

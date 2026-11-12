@@ -965,9 +965,9 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         var healed = ReadingListHealingCoordinator.Recheck(_contextFactory, ReadingListHealingCoordinator.Changed(identityBefore, identityAfter));
         ReadingListHealingCoordinator.Report(healed);
 
-        // Re-derive this issue's Character index from its (possibly edited) Characters text
-        // (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-progression-design.md).
-        CharacterResolver.SyncFromIssue(context, issueId);
+        // Re-derive this issue's character, team, location and creator indexes from its (possibly edited) text fields
+        // (docs/superpowers/specs/2026-11-10-series-structure-and-discovery-plan.md D1.1; characters only before).
+        EntityIndexSync.SyncIssue(context, issueId);
 
         // Undo/Redo (docs/ce-feature-inventory.md §A) - records this Save as one undoable entry.
         // Captured after SaveChanges so the "After" snapshot reflects what's actually now persisted,

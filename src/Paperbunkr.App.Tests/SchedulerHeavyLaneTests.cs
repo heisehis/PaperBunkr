@@ -19,11 +19,11 @@ public class SchedulerHeavyLaneTests
     }
 
     [Fact]
-    public void EveryOtherTask_StillTakesTheLane()
+    public void OnlyBackgroundProviderTasks_RunBesideTheLane()
     {
-        // Only the sync is exempt: scans, scrapes, organize and cover work are the heavy jobs the lane exists for.
-        var exempt = ScheduledTaskCatalog.All.Where(t => !t.UsesHeavyJobLane).Select(t => t.Id).ToList();
+        // Provider waits should not block scans, scrapes, organize and cover work.
+        var exempt = ScheduledTaskCatalog.All.Where(t => !t.UsesHeavyJobLane).Select(t => t.Id).OrderBy(id => id).ToList();
 
-        Assert.Equal(new[] { ScheduledTaskCatalog.MetronSync }, exempt);
+        Assert.Equal(new[] { ScheduledTaskCatalog.EntityImageFill, ScheduledTaskCatalog.FindRelatedSeries, ScheduledTaskCatalog.MetronSync }.OrderBy(id => id), exempt);
     }
 }

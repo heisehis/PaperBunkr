@@ -1,33 +1,138 @@
 {
+  "schemaVersion": 2,
+  "id": "legacy.maximum_contrast",
   "name": "Maximum Contrast",
-  "mode": "Dark",
   "category": "accessibility",
-  "colors": {
-    "bg": "#000000",
-    "chrome": "#0D0D0D",
-    "border": "#4D4D4D",
-    "text": "#FFFFFF",
-    "textMuted": "#C4C4C4",
-    "textFaint": "#8A8A8A",
-    "accent": "#FFD24D",
-    "accentText": "#FFD24D",
-    "accentSoft": "#29FFD24D",
-    "badge": "#FFFFFF",
-    "badgeText": "#000000",
-    "success": "#5CE39A",
-    "chartBlue": "#FFD24D",
-    "chartViolet": "#5CE39A",
-    "surface0": "#000000",
-    "surface1": "#000000",
-    "surface2": "#0D0D0D",
-    "surface3": "#1A1A1A",
-    "glow": "#66FFD24D",
-    "heroGradientStart": "#00000000",
-    "heroGradientEnd": "#FF000000"
+  "base": {
+    "semantic": {
+      "surface": {
+        "canvas": "#000000",
+        "navigation": "#0D0D0D",
+        "recessed": "#000000",
+        "default": "#000000",
+        "raised": "#0D0D0D",
+        "overlay": "#1A1A1A"
+      },
+      "border": {
+        "default": "#4D4D4D"
+      },
+      "text": {
+        "primary": "#FFFFFF",
+        "secondary": "#C4C4C4",
+        "muted": "#8A8A8A",
+        "accent": "#FFD24D"
+      },
+      "action": {
+        "primary": "#FFD24D",
+        "soft": "#29FFD24D"
+      },
+      "badge": {
+        "background": "#FFFFFF",
+        "text": "#000000"
+      },
+      "status": {
+        "success": "#5CE39A"
+      },
+      "chart": {
+        "series": {
+          "1": "#FFD24D",
+          "2": "#5CE39A"
+        }
+      },
+      "glow": {
+        "color": "#66FFD24D"
+      },
+      "hero": {
+        "gradient": {
+          "start": "#00000000",
+          "end": "#FF000000"
+        }
+      }
+    },
+    "metrics": {
+      "spacingUnit": 4,
+      "radius": 7,
+      "radiusSm": 5,
+      "radiusLg": 14
+    },
+    "settings": {
+      "windowBackdrop": "None"
+    }
   },
-  "spacingUnit": 4,
-  "radius": 7,
-  "radiusSm": 5,
-  "radiusLg": 14,
-  "icons": {}
+  "variants": {
+    "dark": {
+      "name": "Dark",
+      "mode": "Dark"
+    },
+    "light": {
+      "name": "Light",
+      "mode": "Light",
+      "semantic": {
+        "surface": {
+          "canvas": "#FFFFFF",
+          "navigation": "#FFFFFF",
+          "recessed": "#F2F2F2",
+          "default": "#FFFFFF",
+          "raised": "#FFFFFF",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#000000"
+        },
+        "text": {
+          "primary": "#000000",
+          "secondary": "#1A1A1A",
+          "muted": "#4D4D4D",
+          "accent": "#0037DA"
+        },
+        "action": {
+          "primary": "#0037DA",
+          "soft": "#330037DA"
+        },
+        "badge": {
+          "background": "#0037DA",
+          "text": "#FFFFFF"
+        },
+        "status": {
+          "success": "#0B6A0B",
+          "danger": "#B00020",
+          "warning": "#6B4A00",
+          "info": "#0037DA"
+        },
+        "chart": {
+          "series": {
+            "1": "#0037DA",
+            "2": "#8A00B8"
+          }
+        },
+        "glow": {
+          "color": "#800037DA"
+        },
+        "hero": {
+          "gradient": {
+            "start": "#00FFFFFF",
+            "end": "#FFFFFFFF"
+          }
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#FFFFFF",
+          "borderThickness": 2
+        },
+        "button.secondary": {
+          "borderThickness": 2
+        },
+        "button.ghost": {
+          "borderThickness": 2
+        },
+        "chip": {
+          "borderThickness": 2
+        },
+        "panel.floating": {
+          "borderThickness": 2
+        }
+      }
+    }
+  }
 }

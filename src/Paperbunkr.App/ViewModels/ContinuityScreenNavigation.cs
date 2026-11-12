@@ -11,6 +11,12 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public sealed class ContinuityScreenNavigation
 {
+    public Action<Paperbunkr.Data.Entities.ComicMetadataEntityKind, int, int?> OpenEntity { get; init; } = (_, _, _) => { };
+
+    /// <summary>Switches the open page to its Map with Featuring set to a character or team (continuity map M5 §5).</summary>
+    public Action<Paperbunkr.Data.Entities.ComicMetadataEntityKind, int> OpenMapFeaturing { get; init; } = (_, _) => { };
+    /// <summary>Library search for a name (a Key characters / teams tile's "Show in Library").</summary>
+    public Action<string>? ShowInLibrary { get; init; }
     public Action<int> GoToSeriesDetail { get; init; } = _ => { };
 
     public Action<int> GoToReader { get; init; } = _ => { };
@@ -25,6 +31,7 @@ public sealed class ContinuityScreenNavigation
     public IActivityService Activity { get; init; } = new ActivityService();
 
     public Action<int> OpenEvent { get; init; } = _ => { };
+    public Action<int, bool> OpenEventSmartFill { get; init; } = (_, _) => { };
 
     /// <summary>Opens an event straight on its Map tab.</summary>
     public Action<int> OpenEventMap { get; init; } = _ => { };

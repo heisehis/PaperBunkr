@@ -14,7 +14,7 @@ namespace Paperbunkr.App.Services.EventMap;
 public sealed record ContinuityEventData(int Id, string Name, int? Start, int? End, IReadOnlyList<EventMapRow> Members, int? SortKey = null, int? Rank = null,
     string? Description = null, string? CoverImageUrl = null, StoryEventCoverSource CoverSource = StoryEventCoverSource.None,
     IReadOnlyList<ContinuityEventTagData>? Tags = null, string? CbroListKey = null, string? CbroSourceName = null, int? CbroSourceYear = null,
-    IReadOnlyList<CbroOverlapNoteData>? CbroOverlapNotes = null)
+    IReadOnlyList<CbroOverlapNoteData>? CbroOverlapNotes = null, EventMissingData? Missing = null)
 {
     /// <summary>The event as <see cref="EventChronology"/> orders it: its span plus where an outside reading order placed it.</summary>
     public EventSpan Span => new(Id, Name, Start, End, SortKey, Rank);
@@ -38,7 +38,9 @@ public sealed record ContinuityMapData(
     IReadOnlyList<ContinuityRelationData> Relations,
     IReadOnlyList<EventMapRow> LooseIssues,
     IReadOnlyDictionary<int, IReadOnlyList<EventMapEventRef>> EventsByIssue,
-    int PendingDuplicatePairs);
+    int PendingDuplicatePairs,
+    IReadOnlyList<MapSeriesRelation>? SeriesRelations = null,
+    EventMapStructure? Structure = null);
 
 /// <summary>
 /// The continuity map's database side (docs/superpowers/specs/2026-09-27-continuity-map-design.md §3): the continuity's member series
@@ -115,6 +117,7 @@ public static class ContinuityMapLoader
             .ToDictionary(g => g.Key, g => (IReadOnlyList<EventMapEventRef>)g.Select(m => m.StoryEventId).Distinct()
                 .Select(id => new EventMapEventRef(id, eventNames.GetValueOrDefault(id, "Event"))).ToList());
 
+        var missingLoader = new EventMissingLoader(context);
         var events = eventIds
             .Where(spans.ContainsKey)
             .Select(id => new ContinuityEventData(
@@ -132,6 +135,7 @@ public static class ContinuityMapLoader
                 cbroEvidence.GetValueOrDefault(id)?.SourceYear,
                 cbroEvidence.GetValueOrDefault(id)?.CbroOverlapNotes.Select(n => new CbroOverlapNoteData(n.OriginalText, n.TargetName, n.TargetYear)).ToList()))
             .ToList();
+        events = events.Select(e => e with { Missing = missingLoader.Load(e.Id, e.Members) }).ToList();
 
         var relations = context.EventRelations.AsNoTracking()
             .Include(r => r.Evidence)
@@ -163,7 +167,14 @@ public static class ContinuityMapLoader
             }
         }
 
-        return new ContinuityMapData(continuity.Id, continuity.Name, lanes, events, relations, loose, eventsByIssue, pending);
+        var mapSeriesIds = lanes.Select(l => l.SeriesId).Concat(events.SelectMany(e => e.Members).Select(r => r.SeriesId)).Distinct().ToList();
+        var seriesRelations = context.MediaRelations.AsNoTracking()
+            .Where(r => r.SourceSeriesId != null && r.TargetSeriesId != null
+                && mapSeriesIds.Contains(r.SourceSeriesId.Value) && mapSeriesIds.Contains(r.TargetSeriesId.Value))
+            .Select(r => new { r.SourceSeriesId, r.TargetSeriesId, r.RelationType, IsUser = r.Evidence.Any(e => e.Provider == RelationEvidenceProvider.User) }).ToList()
+            .Select(r => new MapSeriesRelation(r.SourceSeriesId!.Value, r.TargetSeriesId!.Value, r.RelationType, r.IsUser)).ToList();
+        var structure = EventMapStructureLoader.Load(context, events.SelectMany(e => e.Members).Concat(loose).Select(r => r.IssueId).Distinct().ToList());
+        return new ContinuityMapData(continuity.Id, continuity.Name, lanes, events, relations, loose, eventsByIssue, pending, seriesRelations, structure);
     }
 
     /// <summary>
@@ -263,6 +274,17 @@ public static class ContinuityMapBuilder
 
         void AddBlock(EventMapBlockKind kind, string label, int? eventId, IReadOnlyList<EventMapRow> blockRows)
         {
+            if (options.HiddenSeriesIds is { Count: > 0 } hidden)
+            {
+                foreach (var row in blockRows.Where(r => hidden.Contains(r.SeriesId))) placed.Add(row.IssueId);
+                blockRows = blockRows.Where(r => !hidden.Contains(r.SeriesId)).ToList();
+            }
+            if (options.HideRead)
+            {
+                foreach (var row in blockRows.Where(r => r.ReadState == EventMapReadState.Read && r.IssueId != options.KeepReadIssueId))
+                    placed.Add(row.IssueId);
+                blockRows = blockRows.Where(r => r.ReadState != EventMapReadState.Read || r.IssueId == options.KeepReadIssueId).ToList();
+            }
             if (blockRows.Count == 0)
             {
                 return;
@@ -374,6 +396,15 @@ public static class ContinuityMapBuilder
             }
         }
 
+        // Missing issues (M4) from a series with nothing on the map get a lane of their own, after the real ones.
+        foreach (var row in rows.Where(r => r.SeriesId < 0))
+        {
+            if (lanes.All(l => l.SeriesId != row.SeriesId))
+            {
+                lanes.Add(new ContinuityLane(row.SeriesId, row.SeriesName, Outside: false));
+            }
+        }
+
         var connectors = new List<EventMapConnector>();
         foreach (var r in data.Relations)
         {
@@ -445,7 +476,7 @@ public static class ContinuityMapBuilder
         int eventIssues = rows.Count(r => r.OwnerEventId is not null);
         var events = data.Events.Select(e => new EventMapEventRef(e.Id, e.Name)).OrderBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
         return new ContinuityMapSource(data.ContinuityId, data.Name, publicationOrder, rows, blocks, lanes, connectors, events,
-            eventIssues, publicationOrder ? rows.Count : data.LooseIssues.Count, data.PendingDuplicatePairs);
+            eventIssues, publicationOrder ? rows.Count : data.LooseIssues.Count, data.PendingDuplicatePairs, data.SeriesRelations);
     }
 
     /// <summary>A row's publication date key: <see cref="EventMapRow.SortDate"/> (GCD on-sale date when matched), else its cover date.</summary>

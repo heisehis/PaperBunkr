@@ -257,12 +257,16 @@ public class FoundationStyleTests
     internal static IEnumerable<string> ApplyTheme(string theme)
     {
         using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppRoot(), "Assets", "Skins", theme, "theme.json")));
-        var colors = doc.RootElement.GetProperty("colors");
+        bool legacy = doc.RootElement.TryGetProperty("colors", out var colors);
+        var document = legacy ? null : new Paperbunkr.App.Theming.Runtime.ThemeCatalog().Load(theme);
+        var resolved = document is null ? null : Paperbunkr.App.Theming.ThemeResolver.Resolve(document, document.Variants[0].Id);
         var keys = new List<string>();
         foreach (string name in ThemeColorKeys)
         {
-            var color = Color.Parse(colors.GetProperty(name).GetString()!);
             string pb = "Pb" + char.ToUpperInvariant(name[0]) + name[1..];
+            var role = Paperbunkr.App.Theming.ThemeVocabulary.Roles.FirstOrDefault(r => r.ResourceKey == pb[2..]);
+            var color = legacy ? Color.Parse(colors.GetProperty(name).GetString()!)
+                : resolved?.Color(role?.Path ?? string.Empty) ?? throw new InvalidOperationException($"{theme}: missing colour {name}");
             Application.Current!.Resources[pb + "Color"] = color;
             Application.Current.Resources[pb + "Brush"] = new SolidColorBrush(color);
             keys.Add(pb + "Color");

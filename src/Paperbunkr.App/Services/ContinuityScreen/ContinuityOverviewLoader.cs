@@ -47,7 +47,30 @@ public static class ContinuityOverviewLoader
         // placement, not a link: docs/superpowers/specs/2026-10-12-continuity-sources-design.md §4.2), so there is nothing to offer here yet.
         var connections = new List<OverviewConnection>();
 
-        return ContinuityOverviewBuilder.Build(new ContinuityOverviewInput(map, continuations, placeholders, connections, gcdIds.Count > 0));
+        return ContinuityOverviewBuilder.Build(new ContinuityOverviewInput(map, continuations, placeholders, connections, gcdIds.Count > 0,
+            LoadEntities(context, memberIds, ComicMetadataEntityKind.Character), LoadEntities(context, memberIds, ComicMetadataEntityKind.Team)));
+    }
+
+    public static IReadOnlyList<OverviewEntity> LoadEntities(PaperbunkrDbContext context, IReadOnlyList<int> memberIds, ComicMetadataEntityKind kind)
+    {
+        var appearanceRows = kind == ComicMetadataEntityKind.Character
+            ? context.CharacterAppearances.Where(a => memberIds.Contains(a.Issue!.SeriesId) && !a.Issue.IsPlaceholder).Select(a => new { Id = a.CharacterId, a.IssueId }).ToList()
+            : context.TeamAppearances.Where(a => memberIds.Contains(a.Issue!.SeriesId) && !a.Issue.IsPlaceholder).Select(a => new { Id = a.TeamId, a.IssueId }).ToList();
+        var ranked = appearanceRows.GroupBy(a => a.Id).OrderByDescending(g => g.Select(a => a.IssueId).Distinct().Count()).ThenBy(g => g.Key).Take(10).ToList();
+        var issueIds = appearanceRows.Select(a => a.IssueId).Distinct().ToList();
+        var issues = context.Issues.AsNoTracking().Include(i => i.MetadataProposals).Where(i => issueIds.Contains(i.Id)).ToDictionary(i => i.Id);
+        var result = new List<OverviewEntity>();
+        foreach (var group in ranked)
+        {
+            var entity = EntityProfileCompletion.Find(context, kind, group.Key);
+            string name = kind == ComicMetadataEntityKind.Character ? context.Characters.Find(group.Key)!.Name : context.Teams.Find(group.Key)!.Name;
+            var first = group.Select(a => issues[a.IssueId]).OrderBy(i => i.EffectiveYear() ?? int.MaxValue)
+                .ThenBy(i => i.Month ?? 0).ThenBy(i => i.Day ?? 0).ThenBy(i => i.Id).First();
+            var image = EntityImageResolver.Choose(name, entity?.CustomImagePath, entity?.ImageUrl, first.Id);
+            string? cover = image.CoverIssueId is int coverId && CoverThumbnailService.GetEffectiveCoverPath(coverId) is not null ? coverId.ToString() : null;
+            result.Add(new OverviewEntity(kind, group.Key, name, group.Select(a => a.IssueId).Distinct().Count(), image.Path, cover));
+        }
+        return result;
     }
 
     /// <summary>GCD continuation bonds (numbering continues) from a member series to a GCD series nobody in the library is matched to.</summary>

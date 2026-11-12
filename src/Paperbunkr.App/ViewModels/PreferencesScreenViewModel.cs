@@ -1079,6 +1079,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         TrueBlackAutoHourText = _themeService.GetTrueBlackAutoHour()?.ToString() ?? string.Empty;
         AccentOverrideHexText = _themeService.GetAccentOverrideHex() ?? string.Empty;
         GlowTierText = GlowTierToText(_themeService.GetGlowTier());
+        _personalize?.Refresh(); // its body font and ring strength mirror the two values just loaded
         DensityText = DensityPresets.NameOf(_themeService.GetDensityPreset());
         _suppressThemeOptionsApply = false;
 
@@ -1091,6 +1092,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ShowToolTips = settings.ShowToolTips;
         SmoothScrolling = settings.SmoothScrolling;
         ReadingListMosaic = settings.ReadingListMosaic;
+        ShowCollectionProgress = settings.ShowCollectionProgress;
+        CollectionDensityText = CollectionDensityOptions[(int)settings.CollectionRowDensity == 1 ? 1 : 0];
+        CollectionDotShapeText = CollectionDotShapeOptions[(int)settings.CollectionDotShape == 1 ? 1 : 0];
         SplashAmbientMotion = settings.SplashAmbientMotion;
         ShowSelectionCheckbox = settings.ShowSelectionCheckbox;
         HeroBackdrop = settings.HeroBackdrop;
@@ -1207,7 +1211,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     }
 
     /// <summary>Gates the Matrix-rain toggle row's visibility - keyed on the theme key, same test <c>MainViewModel.IsMatrixThemeActive</c> uses for the overlay itself.</summary>
-    public bool IsActiveThemeMatrix => string.Equals(Themes.FirstOrDefault(t => t.IsActive)?.Key, "matrix", StringComparison.OrdinalIgnoreCase);
+    public bool IsActiveThemeMatrix => ThemeService.IsMatrixRainTheme(Themes.FirstOrDefault(t => t.IsActive)?.Key);
 
     /// <summary>Gates the true-black toggle row's visibility (docs/superpowers/specs/2026-09-16-theme-system-design.md § Variant switching + true black) - a no-op under a Light theme, so hidden rather than shown doing nothing.</summary>
     public bool IsActiveThemeDarkMode => Themes.FirstOrDefault(t => t.IsActive)?.Mode == "Dark";
@@ -1216,7 +1220,24 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private void SelectTheme(ThemeSummary theme)
     {
         _themeService.ApplyTheme(theme.Key);
-        RefreshThemes();
+
+        // Flip the active flags on the summaries already shown instead of rebuilding the gallery from inside the clicked tile's Click
+        // (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md). A changed roster (rare: a theme removed underneath us) rebuilds.
+        var fresh = _themeService.GetAvailableThemes();
+        if (fresh.Count != Themes.Count || !fresh.Select(f => f.Key).SequenceEqual(Themes.Select(t => t.Key), StringComparer.OrdinalIgnoreCase))
+        {
+            RefreshThemes();
+            return;
+        }
+
+        for (int i = 0; i < fresh.Count; i++)
+        {
+            Themes[i].IsActive = fresh[i].IsActive;
+        }
+
+        OnPropertyChanged(nameof(IsActiveThemeDarkMode));
+        OnPropertyChanged(nameof(IsActiveThemeMatrix));
+        RefreshThemeGallery();
     }
 
     partial void OnSelectedFontFamilyChanged(string? value)
@@ -1325,6 +1346,39 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private bool _readingListMosaic = true;
 
     partial void OnReadingListMosaicChanged(bool value) => PersistBehaviorSetting(s => s.ReadingListMosaic = value);
+
+    // --- Collection identity (docs/superpowers/specs/2026-11-06-collection-identity-design.md): the opt-in progress ring, sidebar row density, marker shape. ---
+
+    [ObservableProperty]
+    private bool _showCollectionProgress;
+
+    partial void OnShowCollectionProgressChanged(bool value) => PersistBehaviorSetting(s => s.ShowCollectionProgress = value);
+
+    private static readonly string[] CollectionDensityOptions = { "Comfortable", "Compact" };
+
+    public IReadOnlyList<string> CollectionDensityOptionsList => CollectionDensityOptions;
+
+    [ObservableProperty]
+    private string _collectionDensityText = CollectionDensityOptions[0];
+
+    partial void OnCollectionDensityTextChanged(string value)
+    {
+        var density = value == CollectionDensityOptions[1] ? CollectionRowDensity.Compact : CollectionRowDensity.Comfortable;
+        PersistBehaviorSetting(s => s.CollectionRowDensity = density);
+    }
+
+    private static readonly string[] CollectionDotShapeOptions = { "Circle", "Squircle" };
+
+    public IReadOnlyList<string> CollectionDotShapeOptionsList => CollectionDotShapeOptions;
+
+    [ObservableProperty]
+    private string _collectionDotShapeText = CollectionDotShapeOptions[0];
+
+    partial void OnCollectionDotShapeTextChanged(string value)
+    {
+        var shape = value == CollectionDotShapeOptions[1] ? CollectionDotShape.Squircle : CollectionDotShape.Circle;
+        PersistBehaviorSetting(s => s.CollectionDotShape = shape);
+    }
 
     /// <summary>Drifting dots on the splash screen (cosmetics pitch #6). Read at the next launch; Reduced Motion overrides it.</summary>
     [ObservableProperty]
@@ -1489,6 +1543,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         _themeService.SetAccentOverrideHex(value);
         _themeCustomization?.Refresh();
+        _personalize?.Refresh();
     }
 
     partial void OnOpenLastPageChanged(bool value) => PersistBehaviorSetting(s => s.OpenLastPage = value);

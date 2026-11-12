@@ -2,7 +2,6 @@
   "schemaVersion": 2,
   "id": "paperbunkr.newsprint",
   "name": "Newsprint",
-  "mode": "Light",
   "base": {
     "palette": {
       "canvas": "#F5F3EE",
@@ -154,6 +153,84 @@
               ]
             }
           ]
+        }
+      }
+    }
+  },
+  "variants": {
+    "paper": {
+      "name": "Paper",
+      "mode": "Light"
+    },
+    "night": {
+      "name": "Night Edition",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#141412",
+        "ink": "#EDEAE2",
+        "accent": "#EDEAE2",
+        "success": "#7FB08A",
+        "badge": "#EDEAE2"
+      },
+      "materials": {
+        "nightGrain": {
+          "type": "texture",
+          "source": "textures/night-grain.png",
+          "fallback": "#141412"
+        }
+      },
+      "surfaces": {
+        "canvas": "nightGrain"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#1B1B18",
+          "raised": "#1D1D1A",
+          "overlay": "#262622"
+        },
+        "border": {
+          "default": "#4A4842",
+          "strong": "#EDEAE2"
+        },
+        "text": {
+          "accent": "#EDEAE2"
+        },
+        "badge": {
+          "text": "#141412"
+        },
+        "action": {
+          "primaryText": "#141412",
+          "soft": "#26EDEAE2"
+        },
+        "glow": {
+          "color": "#40EDEAE2"
+        },
+        "status": {
+          "danger": "#E26B66",
+          "warning": "#D9B45A",
+          "info": "#7FA7D1"
+        },
+        "chart": {
+          "series": {
+            "1": "#7FA7D1",
+            "2": "#B79BD6"
+          }
+        },
+        "reader": {
+          "background": {
+            "page": "#1A1A17",
+            "text": "#E6E2D8"
+          }
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#141412",
+          "states": {
+            "hover": {
+              "background": "#FFFFFF"
+            }
+          }
         }
       }
     }

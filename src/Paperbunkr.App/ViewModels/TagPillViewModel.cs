@@ -31,6 +31,25 @@ public partial class TagPillViewModel : ObservableObject
 
     public string Value { get; }
 
+    /// <summary>A character, team or creator chip's cached image (20 px squircle). Observable: it is filled in after the chips are built, off the
+    /// UI thread, and refreshed when a profile image arrives (<see cref="Services.EntityChipImages.Changed"/>).</summary>
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasImage))]
+    private string? _imagePath;
+
+    public bool HasImage => ImagePath is not null;
+
+    /// <summary>Set on character, team, location and creator chips: which index the chip's name is looked up in for its image.</summary>
+    public ComicMetadataEntityKind? EntityKind { get; init; }
+
+    /// <summary>An entity pill's click opens the entity page; this keeps the old Library search one right-click away
+    /// (docs/superpowers/specs/2026-11-12-entity-pages-redesign-design.md §8).</summary>
+    public Action<string>? SearchLibrary { get; init; }
+
+    public bool CanSearchLibrary => SearchLibrary is not null;
+
+    [RelayCommand]
+    private void SearchInLibrary() => SearchLibrary?.Invoke(Value);
+
     public string Category { get; }
 
     public bool IsGenerated { get; }

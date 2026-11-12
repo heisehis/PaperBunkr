@@ -108,3 +108,7 @@ Where the build differs from the text above:
 - **Phase 7:** one entity, `CollectionContent` (issue id, from/to chapter as text and as a sort key, source `Manual`/`MangaDexVolume`). No `Volume`/`Chapter`/`Story` tables. "Map volumes to chapters" fills it from MangaDex's volume list.
   A range entered by hand (no editor yet) is never replaced or cleared by the automatic mapping.
 - **Alignment unit:** a series whose files are numbered by volume (no local number matches a chapter, every one matches a MangaDex volume) is compared against volumes until it is mapped.
+- **Your score (fixed 2026-10-31):** `Series.Rating` was never derived from issue ratings (`SeriesRatingResolver` had no caller), so only series with a tracker
+  "Use this score" counted as rated and the card and fetch action stayed empty. `PaperbunkrDbContext` now recomputes it after any save that adds, removes, re-rates
+  or moves a rated issue (`QueueSeriesRatingRecompute` → `SeriesRatingResolver.Apply`; 0 stars is unrated, as in CE), and the data-only `BackfillSeriesRating`
+  migration filled series that had rated issues but no rating, leaving tracker-pulled scores alone.

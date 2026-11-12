@@ -475,6 +475,16 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
             return;
         }
 
+        // A click or Shift+arrow that only moved the selection, when the hero would show the same thing (the same single issue, or the whole
+        // series for none / several selected): only the edit button's "Edit N issues" label changes. Rebuilding the hero for every tile -
+        // a database load of the series and all its issues, the band, the meta badges - is what made multi-select crawl (2026-11-12).
+        int? wanted = Tabs.SelectedIssueIds.Count == 1 ? Tabs.SelectedIssueIds.Single() : null;
+        if (Tabs.IsSelectionOnlyChange && wanted == _focusedIssueId)
+        {
+            RaiseEditStateChanged();
+            return;
+        }
+
         using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var enabledVirtualTags = context.VirtualTagDefinitions.Where(t => t.IsEnabled).OrderBy(t => t.SortOrder).ToList();
 
@@ -501,7 +511,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
 
             var issueCover = CoverImageCache.Get(issue.Id, issue.FilePath, issue.FileSize);
             CoverImage = issueCover;
-            BackdropImage = issueCover is not null ? BackdropBlurRenderer.Render(issueCover, new PixelSize(1600, 680)) : _seriesBackdrop;
+            BackdropImage = issueCover is not null ? IssueBackdrop(issue.Id, issueCover) : _seriesBackdrop;
             Summary = string.IsNullOrWhiteSpace(issue.Summary) ? "No summary available." : issue.Summary;
             MetaLine = string.Join("  ·  ", new[]
             {
@@ -547,6 +557,31 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         Band.AgeRatingText = issue?.AgeRating ?? string.Empty;
         Band.SetSpecialMarks(issue);
         RebuildMetaBadges(issue, issueFocused);
+    }
+
+    /// <summary>The last few blurred issue backdrops, keyed by issue and by the cover bitmap they were made from (a changed cover is a new bitmap,
+    /// so it is never served stale). The 1600x680 Gaussian blur runs on the UI thread; clicking between a few issues used to redo it every time.</summary>
+    private readonly List<(int IssueId, Bitmap Source, Bitmap? Blurred)> _issueBackdrops = new();
+
+    private Bitmap? IssueBackdrop(int issueId, Bitmap cover)
+    {
+        int hit = _issueBackdrops.FindIndex(b => b.IssueId == issueId && ReferenceEquals(b.Source, cover));
+        if (hit >= 0)
+        {
+            var cached = _issueBackdrops[hit];
+            _issueBackdrops.RemoveAt(hit);
+            _issueBackdrops.Add(cached);
+            return cached.Blurred;
+        }
+
+        var blurred = BackdropBlurRenderer.Render(cover, new PixelSize(1600, 680));
+        _issueBackdrops.Add((issueId, cover, blurred));
+        if (_issueBackdrops.Count > 6)
+        {
+            _issueBackdrops.RemoveAt(0);
+        }
+
+        return blurred;
     }
 
     private void RaiseEditStateChanged()

@@ -167,6 +167,27 @@ public class ContinuityScreenViewModelTests : ContinuityScreenTestBase
     // --- Event Map (ported from the old screen's EventsScreenMapTests and ContinuityMapViewModelTests) ---
 
     [Fact]
+    public async Task MapMaximize_IsScopedToMapAndEscapeRestoresIt()
+    {
+        var (eventId, _, _) = SeedCrisis();
+        var vm = CreateScreen();
+        Assert.False(vm.ToggleMapMaximize());
+        vm.LoadEvent(eventId);
+        vm.SetDetailViewCommand.Execute(EventsDetailView.Map);
+        await vm.MapLoadTask;
+        Assert.True(vm.ToggleMapMaximize());
+        Assert.True(vm.IsMapMaximized);
+        vm.SetDetailViewCommand.Execute(EventsDetailView.Primary);
+        Assert.True(vm.IsMapMaximized);
+        Assert.False(vm.ToggleMapMaximize());
+        vm.SetDetailViewCommand.Execute(EventsDetailView.Map);
+        await vm.MapLoadTask;
+        vm.Map.Select(null, reveal: false);
+        Assert.True(vm.Map.Escape());
+        Assert.False(vm.IsMapMaximized);
+    }
+
+    [Fact]
     public async Task Map_LoadsLazily_OnlyWhenChosen()
     {
         var (eventId, _, _) = SeedCrisis();

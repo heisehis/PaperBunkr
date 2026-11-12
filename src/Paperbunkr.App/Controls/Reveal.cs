@@ -43,6 +43,11 @@ public static class Reveal
     {
         public int Generation;
         public IDisposable? Pending;
+
+        /// <summary>What had focus, outside the surface, when it opened: where focus goes back to on close when no
+        /// <see cref="ReturnFocusToProperty"/> is set (2026-11-12 focus audit - a dialog closed from the keyboard used to drop focus to nothing,
+        /// so the next arrow key started again from the nav rail).</summary>
+        public WeakReference<Control>? Opener;
     }
 
     private static readonly ConditionalWeakTable<Control, State> States = new();
@@ -75,6 +80,11 @@ public static class Reveal
 
         if (open)
         {
+            if (!control.IsVisible || IsClosing(control))
+            {
+                state.Opener = FocusedOutside(control) is { } opener ? new WeakReference<Control>(opener) : null;
+            }
+
             control.Classes.Remove("closing");
             KeyboardNavigation.SetTabNavigation(control, KeyboardNavigationMode.Continue);
             control.IsHitTestVisible = true;
@@ -173,9 +183,17 @@ public static class Reveal
         TopLevel.GetTopLevel(control)?.FocusManager?.GetFocusedElement() is Visual focused
         && (ReferenceEquals(focused, control) || control.IsVisualAncestorOf(focused));
 
+    private static Control? FocusedOutside(Control control) =>
+        TopLevel.GetTopLevel(control)?.FocusManager?.GetFocusedElement() is Control focused
+        && !ReferenceEquals(focused, control) && !control.IsVisualAncestorOf(focused)
+            ? focused
+            : null;
+
     private static void ReturnFocus(Control control)
     {
-        if (GetReturnFocusTo(control) is { IsEffectivelyVisible: true, IsEffectivelyEnabled: true } opener)
+        Control? captured = States.TryGetValue(control, out var state) && state.Opener?.TryGetTarget(out var o) == true ? o : null;
+        var opener = GetReturnFocusTo(control) ?? captured;
+        if (opener is { IsEffectivelyVisible: true, IsEffectivelyEnabled: true, Focusable: true } && TopLevel.GetTopLevel(opener) is not null)
         {
             opener.Focus(NavigationMethod.Tab);
         }

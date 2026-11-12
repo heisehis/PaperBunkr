@@ -1,0 +1,120 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:svc="using:Paperbunkr.App.Services"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="140"
+             x:Class="Paperbunkr.App.Views.CollectionBanner"
+             x:DataType="vm:LibraryScreenViewModel"
+             Classes.slim="{Binding IsBannerSlim}">
+
+    <!-- The banner of the active collection (docs/superpowers/specs/2026-11-06-collection-surfaces-design.md): its cover blurred behind a scrim and the accent,
+         glyph + name, stat chips, the description (markdown, two lines until expanded) and Edit / Pin. Fixed above the grids like the toolbar.
+         DataContext is the Library view model. Slim (docs/superpowers/specs/2026-11-06-collection-icons-and-slim-banner-design.md): once the list is scrolled,
+         or always when the chevron pins it, only the name row shows (with the read %), so the banner costs one line. -->
+    <UserControl.Styles>
+        <Style Selector="controls|MarkdownView.capped">
+            <Setter Property="MaxHeight" Value="40" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="controls|MarkdownView.capped.expanded">
+            <Setter Property="MaxHeight" Value="Infinity" />
+        </Style>
+        <Style Selector="views|CollectionBanner.slim StackPanel.bannerDetail">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="views|CollectionBanner.slim Border#BannerContent">
+            <Setter Property="Padding" Value="24,8" />
+        </Style>
+        <Style Selector="views|CollectionBanner Border.slimRead">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="views|CollectionBanner.slim Border.slimRead">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border x:Name="BannerRoot" IsVisible="{Binding IsBannerVisible}" ClipToBounds="True"
+            Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1"
+            AutomationProperties.Name="{Binding ActiveCollectionBanner.AutomationName}">
+        <Grid>
+            <!-- Blurred cover: a clipped, low-opacity image under the scrim. Several sources, only the one that exists draws. -->
+            <Panel Opacity="0.5" IsHitTestVisible="False" VerticalAlignment="Top" ClipToBounds="True"
+                   Height="{Binding #BannerContent.Bounds.Height}">
+                <Image views:AsyncCoverImage.SourceId="{Binding ActiveCollectionBanner.CoverTile.CoverKey}" Stretch="UniformToFill">
+                    <Image.Effect><BlurEffect Radius="28" /></Image.Effect>
+                </Image>
+                <Image Source="{Binding ActiveCollectionBanner.CoverTile.CoverImage}" Stretch="UniformToFill">
+                    <Image.Effect><BlurEffect Radius="28" /></Image.Effect>
+                </Image>
+                <Image Source="{Binding ActiveCollectionBanner.ManualCover}" Stretch="UniformToFill">
+                    <Image.Effect><BlurEffect Radius="28" /></Image.Effect>
+                </Image>
+            </Panel>
+            <Border Background="{DynamicResource PbSurface2Brush}" Opacity="0.72" IsHitTestVisible="False" />
+            <Border Background="{Binding ActiveCollectionBanner.AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}"
+                    Opacity="0.14" IsHitTestVisible="False" />
+
+            <Border x:Name="BannerContent" Padding="24,16" VerticalAlignment="Top"><Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <controls:CollectionGlyphView Value="{Binding ActiveCollectionBanner.IconGlyph}" IconSize="{StaticResource PbIconSizeLg}"
+                                                      IsVisible="{Binding ActiveCollectionBanner.HasGlyph}" VerticalAlignment="Center"
+                                                      Accent="{Binding ActiveCollectionBanner.AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" />
+                        <TextBlock Classes="pbTextHeading" Text="{Binding ActiveCollectionBanner.Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        <fi:SymbolIcon Symbol="Pin" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding ActiveCollectionBanner.IsPinned}"
+                                       Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" ToolTip.Tip="Pinned" />
+                        <fi:SymbolIcon Symbol="Wand" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding ActiveCollectionBanner.IsSmart}"
+                                       Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" ToolTip.Tip="Has a rule-based membership slot" />
+                        <Panel VerticalAlignment="Center" IsVisible="{Binding ActiveCollectionBanner.ReadText, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <Border Classes="pbChip slimRead"><TextBlock Classes="pbTextCaption" Text="{Binding ActiveCollectionBanner.ReadText}" /></Border>
+                        </Panel>
+                    </StackPanel>
+
+                    <StackPanel Classes="bannerDetail" Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <ItemsControl ItemsSource="{Binding ActiveCollectionBanner.StatChips}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <Border Classes="pbChip"><TextBlock Classes="pbTextCaption" Text="{Binding}" /></Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Classes="pbChip" IsVisible="{Binding ActiveCollectionBanner.ReadText, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <TextBlock Classes="pbTextCaption" Text="{Binding ActiveCollectionBanner.ReadText}" />
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4" IsVisible="{Binding ActiveCollectionBanner.HasDescription}">
+                            <controls:MarkdownView Classes="capped" Classes.expanded="{Binding IsBannerDescriptionExpanded}"
+                                                   Blocks="{Binding ActiveCollectionBanner.DescriptionBlocks}" BaseFontSize="13"
+                                                   BodyBrushKey="PbTextMutedBrush" LinkCommand="{x:Static svc:ExternalLinks.OpenWebCommand}" />
+                            <Button Classes="ghost sm" HorizontalAlignment="Left" Command="{Binding ToggleBannerDescriptionCommand}"
+                                    Content="{Binding IsBannerDescriptionExpanded, Converter={x:Static views:BannerMoreLessConverter.Instance}}" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                    <Button Classes="iconButton" Command="{Binding ToggleBannerSlimCommand}"
+                            AutomationProperties.Name="Keep the banner slim" ToolTip.Tip="Keep the banner slim, or show it in full at the top">
+                        <fi:SymbolIcon Symbol="ChevronRight" Classes="chevronToggle" Classes.open="{Binding !IsBannerSlimPinned}" FontSize="{StaticResource PbIconSizeSm}" />
+                    </Button>
+                    <Button Classes="secondary" Content="Edit" Command="{Binding EditActiveCollectionCommand}"
+                            AutomationProperties.Name="Edit this collection" />
+                    <Button Classes="iconButton" Classes.active="{Binding ActiveCollectionBanner.IsPinned}" Command="{Binding TogglePinActiveCollectionCommand}"
+                            AutomationProperties.Name="Pin or unpin this collection" ToolTip.Tip="Pin or unpin">
+                        <fi:SymbolIcon Symbol="Pin" FontSize="{StaticResource PbIconSizeXs}" />
+                    </Button>
+                </StackPanel>
+            </Grid></Border>
+        </Grid>
+    </Border>
+</UserControl>

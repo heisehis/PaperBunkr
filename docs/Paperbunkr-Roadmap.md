@@ -2403,6 +2403,90 @@ they're new deviation work on top of an already-deviated surface.
 improvement 1 (section reordering) and improvement 3 (attention item on Home) are small and
 immediately useful.
 
+### Smart features pitch 2 (unscoped, pitched 2026-11-08)
+**Trimmed 2026-11-10:** the user excluded #2, #7, #11, #12, #14, #16 and #20 (numbers kept so cross-references stay valid);
+13 items remain: 1, 3, 4, 5, 6, 8, 9, 10, 13, 15, 17, 18, 19.
+**#1, #3 and #17 designed 2026-11-10** (not built): `docs/superpowers/specs/2026-11-10-smart-features-2-design.md`, three slices A/B/C.
+The spec supersedes the item text below for those three. Plan: `2026-11-10-smart-features-2-plan.md`.
+**#4, #5 and #19 designed 2026-11-10** (not built): `docs/superpowers/specs/2026-11-10-reading-signals-design.md` (R1–R3; R1 needs slice B's
+reader queue). **#8, #9 and #10 designed 2026-11-10** (not built): `docs/superpowers/specs/2026-11-10-file-handling-design.md`
+(F1–F4; F4 adds CE's moved-file reconnect). **#6, #13, #15 and #18 implemented 2026-11-10** (uncommitted working tree; base HEAD `28e60a1`):
+`docs/superpowers/specs/2026-11-10-series-structure-and-discovery-design.md` (D1–D4, plus character/team/creator images from Metron or
+ComicVine, Continuity links, and Library group-by Writer / Main character). All four slices and the reader queue prerequisite are implemented;
+verification and native-review limits are recorded in the design §9. All 13 remaining items of this pitch are now specced.
+**CE parity gap noted, not scheduled:** CE's column browser (`SearchBrowserControl`: Writers, Characters, Teams, Main Characters/Teams,
+Story Arcs columns) has no Paperbunkr equivalent.
+Other slices remain at their statuses above; the following pitch text records the original proposals and is superseded by each approved spec.
+Checked against what is already built so none of these repeat it: the first smart-features pitch (S1–S5: templates, gaps,
+consistency scan, drop-off, Up Next, time-left, Wanted affinity, relink, dedup ranking, auto-accept, genre suggestions,
+continuity suggestions, chronology check), the comic reader slices A–G, the Insights, Home and Reading List pitches, the Books
+arc and the series relation connector. At the original pitch survey (before D1–D4), there was no character screen or arc parsing
+inside a series, no import inbox, no rating suggestion, no image lookup and no digest. "Export to another format" stays
+dropped (see Deferred), so nothing here converts files.
+
+**Reading flow**
+1. **"Previously on…" card** — when you open the next issue of a series after a gap (default 3 weeks since you last read it),
+   a dismissible card shows the summaries of the last 2–3 issues you read, the last page you saw, and the main characters from
+   `CharacterAppearance`. Built only from issues you have read, so it cannot spoil anything. Comic and book readers.
+2. ~~**Spoiler shield**~~ **Excluded 2026-11-10** — blur the covers and hide the synopses of issues more than one past your read position, on Library,
+   Detail, Wanted and the pull list. Per-series toggle; hold to peek. Extends the AniList `isMediaSpoiler` tag handling to
+   covers and summaries.
+3. **"I've got 30 minutes"** — a Ctrl+K command and a Home chip that pick next issues fitting a time budget, from the S2
+   time-left estimates; finishing a started issue beats starting a new one.
+4. **Catch up before release day** — when a pull-list issue's store date is near and you are behind on that series, Home
+   nudges "3 issues to catch up before Wednesday, about 45 min". Uses `PullListRelease.StoreDate` and the time-left estimate.
+5. **Rating suggestions from how you read** — for finished but unrated series, propose a rating from your behaviour (pace
+   against your own median, re-reads, binge sessions, stop-and-resume). Shown as a chip with its reason ("read in 2 days,
+   went back to #3 — 4★?"); never applied without a click.
+6. **Arcs inside a series** — split a long series' issue list into arcs from "Part 2 of 6", "Chapter Three", the StoryArc
+   field and title changes; per-arc progress and a one-click "read this arc" reading list. Heuristics over stored titles only.
+
+**Library and import**
+7. ~~**Import inbox**~~ **Excluded 2026-11-10** — files arriving through `LiveFolderWatchService` or drag-and-drop land in an Inbox with a proposed series,
+   issue number, scrape match and Organizer destination; accept all or row by row, instead of the file silently appearing
+   somewhere in the library.
+8. **Filename pattern learning** — when you correct a parsed series or number, learn the pattern for that folder or release
+   group and offer "apply to 34 similar files", plus future imports. Learned patterns listed (and deletable) in Preferences.
+9. **"You already own this" at import** — cover dHash, page count and size checked at import time, so a duplicate is caught
+   before it is added rather than later by the Duplicate Finder plugin. Choices: skip, keep both, or upgrade (item 10).
+10. **Upgrade in place** — swap an owned issue's file for a better scan while keeping read state, rating, `ReadingEvent`
+    history, bookmarks and page notes. Bookmarks and notes move page-to-page using the Compare (E2) dHash pairing, so one on
+    page 14 lands on the right page even if the new scan has an extra ad page. The old file goes to the recycle bin.
+11. ~~**Paste-a-cover lookup**~~ **Excluded 2026-11-10** — paste or drop an image (a phone photo of a physical comic, a store screenshot) and find it by
+    perceptual match against library covers and cached provider covers: "you own it", "it's on Wanted", or "add to Wanted".
+
+**Metadata**
+12. ~~**Staleness-aware refresh**~~ **Excluded 2026-11-10** — issues scraped near release often lack the summary, credits and ratings that Metron and
+    ComicVine add later. Re-check those at +2 and +6 weeks, ongoing series monthly, old finished ones never; runs as a
+    Scheduled Task and reports "filled 41 fields". Fills empty fields only (matches the existing proposal rule).
+13. **Creator runs** — find writer and artist runs inside long series from the credits (e.g. a 180-issue run on one title),
+    show them on Detail, and build a "read this run" reading list.
+14. ~~**Follow creators**~~ **Excluded 2026-11-10** — the unbuilt half of Insights #7: creators inferred from your affinity, or followed by hand, get their
+    new releases pulled into the pull list and Wanted from Metron creator lookups, labelled "because you follow …".
+15. **Character pages** — `Character` is a derived index with no screen. Give each character a page: first appearance in your
+    library, an appearance timeline, series breakdown, unread appearances, and an in-order reading list using Story Event
+    chronology where it exists.
+16. ~~**Series status inference**~~ **Excluded 2026-11-10** — propose Ended, On hiatus or Cancelled from evidence: provider issue count reached, no pull-list
+    release in 6 months, "(of 12)" markers in titles, the manga provider's status. Proposed, never silently changed; feeds the
+    existing `SeriesStatusChanged` event.
+
+**Search and discovery**
+17. **Natural-language search** — "unread marvel from 2023 by hickman" parsed locally into SmartList rules using the vocabulary
+    service (publishers, creators, genres, years, read state). The parsed chips show under the box and can be edited; "Save as
+    Smart List". No network, no language model.
+18. **"More like this" without ML** — a scored, explained list from shared creators, characters, weighted tags, publisher or
+    imprint and era ("same writer, 4 shared characters"). A cheap stand-in for the out-of-scope embeddings idea (pitch 1, #15).
+
+**Automation**
+19. **Weekly digest** — one Activity Center entry a week: pull-list releases matched, issues acquired, series finished, stalled
+    series, goal pace, metadata filled; each line links to its screen. Replaces a stream of separate toasts.
+20. ~~**Smart offline set for remote and OPDS libraries**~~ **Excluded 2026-11-10** — on a laptop reading a shared library, keep the next 3 unread issues of
+    every in-progress series downloaded, under a size cap, removed once read. Needs a check of what remote sharing can download
+    today before scoping.
+
+*Suggested starting order (not a commitment):* 1 and 3 (cheap, reuse built data), 17 (high visibility), 9 and 10 together (one
+dHash path), 15 (data already exists, only a screen is missing).
+
 ### Deferred / dropped (no action needed)
 - **News reader** (`Help > News` RSS) — deferred, live idea to repurpose the feed mechanism for
   something Paperbunkr-relevant; needs its own brainstorm before scoping

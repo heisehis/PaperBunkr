@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.Data.Metadata;
 
@@ -18,7 +19,8 @@ public static class EventSpineResolver
 
     /// <summary>The main series: the saved one if still a member, none if <paramref name="savedSpineSeriesId"/> is <see cref="ForceRelay"/>, else the name match.</summary>
     /// <param name="rowsInReadingOrder">One entry per member issue, in reading order.</param>
-    public static int? Resolve(string? eventName, int? savedSpineSeriesId, IReadOnlyList<(int SeriesId, string SeriesName)> rowsInReadingOrder)
+    public static int? Resolve(string? eventName, int? savedSpineSeriesId, IReadOnlyList<(int SeriesId, string SeriesName)> rowsInReadingOrder,
+        IReadOnlyList<(int Source, int Target, RelationType Type)>? userRelations = null)
     {
         if (savedSpineSeriesId == ForceRelay)
         {
@@ -30,7 +32,26 @@ public static class EventSpineResolver
             return saved;
         }
 
-        return FindNameMatch(eventName, rowsInReadingOrder);
+        return FindRelationMatch(rowsInReadingOrder, userRelations) ?? FindNameMatch(eventName, rowsInReadingOrder);
+    }
+
+    /// <summary>Chooses the member with the most user-authored tie-in links, breaking ties by issue count and first appearance.</summary>
+    public static int? FindRelationMatch(IReadOnlyList<(int SeriesId, string SeriesName)> rowsInReadingOrder,
+        IReadOnlyList<(int Source, int Target, RelationType Type)>? userRelations)
+    {
+        if (userRelations is null || userRelations.Count == 0) return null;
+        var members = rowsInReadingOrder.Select(r => r.SeriesId).ToHashSet();
+        var counts = new Dictionary<int, int>();
+        foreach (var (source, target, type) in userRelations.Distinct())
+        {
+            if (source == target || !members.Contains(source) || !members.Contains(target)) continue;
+            int? candidate = type == RelationType.TieIn ? target : type == RelationType.MainEventSeries ? source : null;
+            if (candidate is int id) counts[id] = counts.GetValueOrDefault(id) + 1;
+        }
+        return rowsInReadingOrder.Select((row, index) => (row, index)).GroupBy(x => x.row.SeriesId)
+            .Where(g => counts.ContainsKey(g.Key))
+            .OrderByDescending(g => counts[g.Key]).ThenByDescending(g => g.Count()).ThenBy(g => g.Min(x => x.index))
+            .Select(g => (int?)g.Key).FirstOrDefault();
     }
 
     /// <summary>The member series whose name matches the event's, or null.</summary>

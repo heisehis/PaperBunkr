@@ -10,7 +10,7 @@ namespace Paperbunkr.Data.Gcd;
 /// Read-only access to the installed Grand Comics Database extract (docs/superpowers/specs/2026-09-27-gcd-data-design.md §2). Every
 /// GCD feature asks <see cref="TryOpen"/> first and quietly does nothing when the data isn't installed.
 /// </summary>
-public sealed class GcdDataStore : IDisposable
+public sealed partial class GcdDataStore : IDisposable
 {
     private readonly SqliteConnection _connection;
 
@@ -42,10 +42,16 @@ public sealed class GcdDataStore : IDisposable
         {
             connection.Open();
             var meta = ReadMeta(connection);
-            if (meta.GetValueOrDefault("schema_version") != GcdExtractor.SchemaVersion.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            if (!int.TryParse(meta.GetValueOrDefault("schema_version"), out int schema) || schema is < 1 or > GcdExtractor.SchemaVersion)
             {
                 connection.Dispose();
                 return null;
+            }
+            if (schema >= 2)
+            {
+                using var verify = connection.CreateCommand();
+                verify.CommandText = "SELECT a.id,a.description,m.arc_id,m.issue_id,m.reprint,d.issue_id,d.format,d.uncertain,d.reprint FROM arc a,arc_issue m,issue_event d LIMIT 0";
+                using var reader = verify.ExecuteReader();
             }
 
             return new GcdDataStore(connection, meta.GetValueOrDefault("dump_date") ?? "unknown");

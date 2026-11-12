@@ -1,40 +1,58 @@
 using System;
 using System.ComponentModel;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Media;
 using Avalonia.Threading;
+using Paperbunkr.App.Services.EventMap;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.ViewModels;
 
 namespace Paperbunkr.App.Views;
 
-/// <summary>
-/// Code-behind for the Event Map (docs/superpowers/specs/2026-09-25-event-map-design.md §3-§4): wires the surface's card
-/// presses to the view model, keeps the pinned ruler and lane headers in step with the scroll offset, handles the
-/// map's own keyboard (control behavior rather than an input-service action - it only applies while the map has focus),
-/// Ctrl+wheel density and Shift+wheel horizontal scroll, and scrolls cards into view.
-/// </summary>
+/// <summary>Connects the drawn map to its view model and handles focused-item navigation.</summary>
 public partial class EventMapView : UserControl
 {
-    private const double RevealMargin = 24;
-    private const double ShiftWheelStep = 80;
-
     private EventMapViewModel? _vm;
-    private double _centerRatioX = 0.5;
-    private double _centerRatioY = 0.5;
+    private int _bandClickGeneration;
+    private readonly AttachedInputRegistration _mapInput;
 
     public EventMapView()
     {
         InitializeComponent();
-        Surface.CardPressed += OnCardPressed;
-        Ruler.BandClicked += block => _vm?.OpenBand(block);
-        Scroller.ScrollChanged += OnScrollChanged;
-        Scroller.AddHandler(PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel, handledEventsToo: true);
-
-        // Tunnel, not bubble: the ScrollViewer would otherwise consume the arrow keys for scrolling before they reach us.
+        _mapInput = new AttachedInputRegistration(this, InputScope.Continuity, OnMapInput, service: InputServiceLocator.Current, focusRoot: () => this);
+        MapCanvas.CardPressed += OnCardPressed;
+        MapCanvas.SelectionCleared += () => _vm?.Select(null, reveal: false);
+        MapCanvas.BandPressed += OnBandPressed;
+        MapCanvas.LanePressed += _ => _vm?.ToggleShortLanesCommand.Execute(null);
+        MatrixCanvas.CardPressed += OnCardPressed;
+        MatrixCanvas.OpenOnMap += index => _vm?.OpenMatrixIssueOnMap(index);
+        AtlasCanvas.OpenEvent += eventId => _vm?.OpenAtlasEvent(eventId);
+        MapCanvas.BracketCreatorPressed += creator => _vm?.ToggleCreatorHighlight(creator);
+        MapCanvas.PeekChanged += index =>
+        {
+            if (_vm is not null) _vm.PeekCard = index is int i && i < _vm.Cards.Count ? _vm.Cards[i] : null;
+        };
+        MapCanvas.ViewportChanged += UpdateMinimumScale;
         AddHandler(KeyDownEvent, OnMapKeyDown, RoutingStrategies.Tunnel);
+    }
+
+    public IInputService InputService { get => _mapInput.Service; set => _mapInput.Service = value; }
+
+    private void OnMapInput(InputActionEventArgs e)
+    {
+        if (_vm is null || !_vm.HasMap || !_vm.IsMapMode) return;
+        bool zoomIn = e.Action.Id == InputActionIds.ContinuityMapZoomIn;
+        if (!zoomIn && e.Action.Id != InputActionIds.ContinuityMapZoomOut) return;
+        var point = e.GetPosition(MapCanvas);
+        if (point is { } p && !new Rect(MapCanvas.Bounds.Size).Contains(p)) return;
+        var anchor = point is { } cursor ? new Point(cursor.X - MapCanvas.RailWidth, cursor.Y - MapCanvas.RulerHeight)
+            : new Point(MapCanvas.ContentViewport.Width / 2, MapCanvas.ContentViewport.Height / 2);
+        double notches = e.WheelDelta.Y == 0 ? 1 : Math.Abs(e.WheelDelta.Y);
+        MapCanvas.ZoomAbout(anchor, Math.Pow(1.1, zoomIn ? notches : -notches));
+        e.Handled = true;
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -42,161 +60,111 @@ public partial class EventMapView : UserControl
         base.OnDataContextChanged(e);
         if (_vm is not null)
         {
+            _vm.PeekCard = null;
             _vm.RevealRequested -= OnRevealRequested;
+            _vm.FitRequested -= FitAll;
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
+            _vm.RevealSeriesRequested -= OnRevealSeries;
+            _vm.FitAtlasRequested -= AtlasCanvas.Fit;
+            _vm.SaveImageRequested -= OnSaveImageRequested;
         }
-
         _vm = DataContext as EventMapViewModel;
         if (_vm is not null)
         {
             _vm.RevealRequested += OnRevealRequested;
+            _vm.FitRequested += FitAll;
             _vm.PropertyChanged += OnViewModelPropertyChanged;
+            _vm.RevealSeriesRequested += OnRevealSeries;
+            _vm.FitAtlasRequested += AtlasCanvas.Fit;
+            _vm.SaveImageRequested += OnSaveImageRequested;
         }
     }
 
-    private void OnCardPressed(int index, int clickCount)
+    private void OnCardPressed(int index, int clicks)
     {
-        if (_vm is null)
+        if (_vm is null) return;
+        _vm.ActivateCard(index);
+        if (_vm.IsMapMode) OnRevealRequested(index);
+        if (clicks >= 2) _vm.OpenReaderCommand.Execute(null);
+    }
+
+    private void OnRevealSeries(int seriesId)
+    {
+        if (_vm is null) return;
+        if (_vm.IsMatrixMode) MatrixCanvas.RevealSeries(seriesId);
+        else if (_vm.IsListMode)
         {
+            var header = _vm.ListItems.OfType<EventListIssueItem>().FirstOrDefault(r => r.Card.SeriesId == seriesId);
+            if (header is not null) _vm.Select(header.Card.Index, reveal: false);
+        }
+        else
+        {
+            MapCanvas.RevealSeries(seriesId);
+        }
+    }
+
+    private void OnBandPressed(int index, int clicks)
+    {
+        if (_vm is null || index < 0 || index >= _vm.Layout.Blocks.Count) return;
+        int generation = ++_bandClickGeneration;
+        if (clicks >= 2)
+        {
+            var span = _vm.Layout.BlockColumns(_vm.Layout.Blocks[index]);
+            double scale = EventMapZoom.FitBand(span.Last - span.First + 1, MapCanvas.ContentViewport.Width);
+            scale = EventMapZoom.ClampScale(scale, _vm.MinimumScale);
+            double center = (span.First + span.Last + 1) * EventMapMetrics.ForScale(scale).SlotWidth / 2;
+            MapCanvas.GlideToView(scale, new Vector(center - MapCanvas.ContentViewport.Width / 2, MapCanvas.Offset.Y));
             return;
         }
-
-        _vm.ActivateCard(index);
-        if (clickCount >= 2)
-        {
-            _vm.OpenReaderCommand.Execute(null);
-        }
+        DispatcherTimer.RunOnce(() => { if (generation == _bandClickGeneration) _vm?.OpenBand(index); }, TimeSpan.FromMilliseconds(350));
     }
 
-    private void OnScrollChanged(object? sender, ScrollChangedEventArgs e)
-    {
-        var offset = Scroller.Offset;
-        Ruler.OffsetX = offset.X;
-        LaneHeaders.RenderTransform = new TranslateTransform(0, -offset.Y);
-
-        var extent = Scroller.Extent;
-        var viewport = Scroller.Viewport;
-        if (extent.Width > 0)
-        {
-            _centerRatioX = (offset.X + (viewport.Width / 2)) / extent.Width;
-        }
-
-        if (extent.Height > 0)
-        {
-            _centerRatioY = (offset.Y + (viewport.Height / 2)) / extent.Height;
-        }
-    }
-
-    /// <summary>
-    /// A new layout (density, filter, spine or event change): once it has been measured, keep the selected card centred,
-    /// or failing that the previous viewport centre.
-    /// </summary>
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(EventMapViewModel.Layout))
-        {
-            return;
-        }
-
-        double ratioX = _centerRatioX;
-        double ratioY = _centerRatioY;
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (_vm is null)
-            {
-                return;
-            }
-
-            if (_vm.SelectedIndex is int selected && selected < _vm.Layout.Cells.Count)
-            {
-                CenterOn(_vm.Layout.CardRect(selected).Center);
-            }
-            else
-            {
-                var total = _vm.Layout.TotalSize;
-                CenterOn(new Point(ratioX * total.Width, ratioY * total.Height));
-            }
-        }, DispatcherPriority.Background);
+        if (e.PropertyName == nameof(EventMapViewModel.Layout)) Dispatcher.UIThread.Post(UpdateMinimumScale, DispatcherPriority.Background);
     }
 
-    private void CenterOn(Point point)
+    private void UpdateMinimumScale()
     {
-        var viewport = Scroller.Viewport;
-        Scroller.Offset = new Vector(Math.Max(0, point.X - (viewport.Width / 2)), Math.Max(0, point.Y - (viewport.Height / 2)));
+        if (_vm is null || _vm.Layout.IsEmpty || MapCanvas.Bounds.Width <= 0 || MapCanvas.Bounds.Height <= 0) return;
+        _vm.MinimumScale = EventMapZoom.MinimumScaleForFit(EventMapZoom.FitScale(_vm.Layout.ColumnCount, _vm.Layout.TrackCount, MapCanvas.Bounds.Size, MapCanvas.RailWidth, MapCanvas.RulerHeight));
     }
 
-    /// <summary>Keyboard moves and link clicks: scroll just enough to bring the card fully into view, then focus it.</summary>
-    private void OnRevealRequested(int index)
+    private void FitAll()
     {
-        // Scrolling can recycle the card that has focus before the new one exists, so whether the map held focus is read now, not after the scroll.
-        bool hadFocus = IsKeyboardFocusWithin;
-        Dispatcher.UIThread.Post(() =>
+        if (_vm is null) return;
+        UpdateMinimumScale();
+        double fitScale = EventMapZoom.FitScale(_vm.Layout.ColumnCount, _vm.Layout.TrackCount, MapCanvas.Bounds.Size, MapCanvas.RailWidth, MapCanvas.RulerHeight);
+        var metrics = EventMapMetrics.ForScale(fitScale);
+        var total = _vm.Layout.TotalSizeFor(metrics);
+        var viewport = MapCanvas.ContentViewport;
+        var target = new Vector((total.Width - viewport.Width) / 2, (total.Height - viewport.Height) / 2);
+        if (_vm.SelectedIndex is int index && _vm.IsInspectorOpen && !_vm.IsInspectorDocked)
         {
-            if (_vm is null || index >= _vm.Layout.Cells.Count)
-            {
-                return;
-            }
-
-            var rect = _vm.Layout.CardRect(index).Inflate(RevealMargin);
-            var offset = Scroller.Offset;
-            var viewport = Scroller.Viewport;
-            double x = offset.X;
-            double y = offset.Y;
-            if (rect.Left < x) x = rect.Left;
-            else if (rect.Right > x + viewport.Width) x = rect.Right - viewport.Width;
-            if (rect.Top < y) y = rect.Top;
-            else if (rect.Bottom > y + viewport.Height) y = rect.Bottom - viewport.Height;
-            Scroller.Offset = new Vector(Math.Max(0, x), Math.Max(0, y));
-
-            // The card is realized on the layout pass that follows the scroll.
-            Dispatcher.UIThread.Post(() =>
-            {
-                bool focusLost = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is null;
-                if ((IsKeyboardFocusWithin || (hadFocus && focusLost)) && _vm?.SelectedIndex == index)
-                {
-                    Surface.CardAt(index)?.Focus(NavigationMethod.Directional);
-                }
-            }, DispatcherPriority.Background);
-        }, DispatcherPriority.Background);
+            var rect = _vm.Layout.CardRect(index, metrics).Inflate(24);
+            double visibleWidth = Math.Max(1, viewport.Width - 364);
+            if (rect.Right > target.X + visibleWidth) target = new Vector(rect.Right - visibleWidth, target.Y);
+        }
+        MapCanvas.GlideToView(fitScale, target);
     }
 
-    private void OnWheel(object? sender, PointerWheelEventArgs e)
+    private void OnRevealRequested(int index) => Dispatcher.UIThread.Post(() =>
     {
-        if (_vm is null)
-        {
-            return;
-        }
+        if (_vm is not null) MapCanvas.Reveal(index, _vm.IsInspectorOpen && !_vm.IsInspectorDocked ? 364 : 0);
+    }, DispatcherPriority.Background);
 
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
-        {
-            _vm.StepDensity(e.Delta.Y > 0 ? 1 : -1);
-            e.Handled = true;
-        }
-        else if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Delta.X == 0)
-        {
-            var offset = Scroller.Offset;
-            Scroller.Offset = new Vector(Math.Max(0, offset.X - (e.Delta.Y * ShiftWheelStep)), offset.Y);
-            e.Handled = true;
-        }
-    }
-
-    /// <summary>Map keys apply while focus is on the map itself (a card or the scroller); Esc also works from the inspector.</summary>
     private void OnMapKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Handled || _vm is null || !_vm.HasMap || e.Source is TextBox || IsWithin<Controls.SuggestBox>(e.Source))
+        if (e.Handled || _vm is null || !_vm.HasMap || e.Source is TextBox || IsWithin<Controls.SuggestBox>(e.Source)) return;
+        if (_vm.IsMatrixMode && IsWithin(e.Source, MatrixCanvas))
         {
+            if (e.Key == Key.Escape) e.Handled = MatrixCanvas.CloseExpansion() || _vm.Escape();
             return;
         }
-
-        if (e.Key != Key.Escape && !IsWithin(e.Source, Scroller))
-        {
-            return;
-        }
-
+        if (e.Key != Key.Escape && !IsWithin(e.Source, MapCanvas)) return;
         e.Handled = HandleKey(_vm, e.Key, e.KeyModifiers);
     }
 
-    /// <summary>The map's keyboard (spec §4). Returns whether the key was used. Internal for headless tests.</summary>
     internal static bool HandleKey(EventMapViewModel vm, Key key, KeyModifiers modifiers)
     {
         switch (key)

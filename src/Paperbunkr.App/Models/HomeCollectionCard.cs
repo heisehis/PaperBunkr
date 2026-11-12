@@ -39,7 +39,29 @@ public sealed class HomeCollectionCard
 
     public bool HasMosaic => MosaicCovers is not null;
 
-    public static HomeCollectionCard FromCollection(Collection collection, CollectionCoverHint hint, IReadOnlyList<CollectionMember>? members = null)
+    /// <summary>Two or three covers for the Fan style (front card first), or null.</summary>
+    public IReadOnlyList<IImage?>? FanCovers { get; init; }
+
+    /// <summary>0..1 read progress for the opt-in corner ring; null hides it (setting off, or no units).</summary>
+    public double? RingFraction { get; init; }
+
+    /// <summary>The collection you read from most recently (docs/superpowers/specs/2026-11-06-collection-surfaces-design.md): drawn as the larger hero card, first on the shelf.</summary>
+    public bool IsHero { get; set; }
+
+    /// <summary>The issue the hero's Continue chip opens; null when everything is read or there is no hero.</summary>
+    public int? ContinueIssueId { get; set; }
+
+    public string? ContinueLabel { get; set; }
+
+    public bool HasContinue => ContinueIssueId is not null;
+
+    public string? RingText { get; init; }
+
+    public static HomeCollectionCard FromCollection(
+        Collection collection,
+        CollectionCoverHint hint,
+        IReadOnlyList<CollectionMember>? members = null,
+        CollectionProgress? progress = null)
     {
         IBrush coverBrush = SeriesCardSample.CoverBrushFor(collection.Name);
         Bitmap? coverImage = null;
@@ -62,6 +84,10 @@ public sealed class HomeCollectionCard
             coverImage = tile.CoverImage ?? (tile.CoverKey is string coverKey ? CoverImageCache.Get(coverKey) : null);
         }
 
+        // A manual cover file always wins over the style (the caller passes no members then).
+        var style = hint.ManualPath is null ? collection.CoverStyle : CollectionCoverStyle.Single;
+        var (mosaic, fan) = BuildStyled(style, hint.FirstMember, members);
+
         return new HomeCollectionCard
         {
             Id = collection.Id,
@@ -70,17 +96,37 @@ public sealed class HomeCollectionCard
             AccentColor = collection.AccentColor,
             CoverBrush = coverBrush,
             CoverImage = coverImage,
-            MosaicCovers = hint.ManualPath is null && members is not null ? BuildMosaic(members) : null,
+            MosaicCovers = mosaic,
+            FanCovers = fan,
+            RingFraction = progress is { Total: > 0 } p ? p.Fraction : null,
+            RingText = progress is { Total: > 0 } q ? $"{System.Math.Round(q.Fraction * 100):0}% read ({q.Read} of {q.Total})" : null,
         };
     }
 
-    /// <summary>A manual cover always wins (checked by the caller); otherwise the members' covers through the shared fill rule.
-    /// Null when the rule says "single cover" (fewer than three distinct covers).</summary>
-    private static IReadOnlyList<IImage?>? BuildMosaic(IReadOnlyList<CollectionMember> members)
+    /// <summary>
+    /// The mosaic / fan covers for a style. Distinct covers are gathered with the chosen (or first) member first, so it leads the stack. Auto and Mosaic
+    /// use the shared fill rule (<see cref="ReadingListCoverMosaic"/>: three or more distinct covers); Fan needs two or more; Single and every
+    /// fallback return (null, null) so the single cover shows.
+    /// </summary>
+    internal static (IReadOnlyList<IImage?>? Mosaic, IReadOnlyList<IImage?>? Fan) BuildStyled(
+        CollectionCoverStyle style, CollectionMember? lead, IReadOnlyList<CollectionMember>? members)
     {
+        if (style == CollectionCoverStyle.Single || members is null)
+        {
+            return (null, null);
+        }
+
+        var ordered = new List<CollectionMember>(members.Count);
+        if (lead is not null)
+        {
+            ordered.Add(lead);
+        }
+
+        ordered.AddRange(members.Where(m => lead is null || !ReferenceEquals(m, lead)));
+
         var imagesByKey = new Dictionary<string, IImage?>();
         var keys = new List<string>();
-        foreach (var member in members)
+        foreach (var member in ordered)
         {
             var tile = LibraryTile.FromMember(member);
             if (tile.CoverKey is not string key || imagesByKey.ContainsKey(key))
@@ -96,7 +142,13 @@ public sealed class HomeCollectionCard
             }
         }
 
+        if (style == CollectionCoverStyle.Fan)
+        {
+            return keys.Count >= 2 ? (null, keys.Take(3).Select(k => imagesByKey[k]).ToList()) : (null, null);
+        }
+
+        // Auto and Mosaic: the lead cover is kept first by the fill rule's input order.
         var picked = ReadingListCoverMosaic.PickCoverKeys(keys);
-        return picked.Count == 4 ? picked.Select(k => imagesByKey[k]).ToList() : null;
+        return picked.Count == 4 ? (picked.Select(k => imagesByKey[k]).ToList(), null) : (null, null);
     }
 }

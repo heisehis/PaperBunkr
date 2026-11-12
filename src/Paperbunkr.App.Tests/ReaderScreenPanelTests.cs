@@ -572,11 +572,15 @@ public class ReaderScreenPanelTests : IDisposable
 
             vm.ReportBadPanelsCommand.Execute(null);
 
+            // Detection and file writing run in the background (docs/superpowers/specs/2026-10-26-guided-view-performance-design.md); the last toast says it finished.
+            Pump(window, () => toasts.Any(t => t.Title == "Page saved for panel tuning"));
+
             var folder = Assert.Single(Directory.GetDirectories(root));
             Assert.True(File.Exists(Path.Combine(folder, "page.png")));
             using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "detection.json")));
             Assert.Equal(4, json.RootElement.GetProperty("panels").GetArrayLength());
-            Assert.Equal("Page saved for panel tuning", Assert.Single(toasts).Title);
+            Assert.Equal(PanelDetectionService.ModelName, json.RootElement.GetProperty("model").GetProperty("name").GetString());
+            Assert.Equal(["Preparing panel report…", "Page saved for panel tuning"], toasts.Select(t => t.Title));
         }
         finally
         {

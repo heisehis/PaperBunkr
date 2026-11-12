@@ -189,8 +189,13 @@ public static class CollectionResolver
     {
         var collection = context.Collections.Find(collectionId);
         string? manual = collection is { IsAutoCover: false } ? collection.CoverImagePath : null;
-        var first = GetMembers(context, collectionId).FirstOrDefault();
-        return new CollectionCoverHint(manual, first);
+        var members = GetMembers(context, collectionId);
+
+        // A chosen cover member (Collection.CoverMemberItemId) wins; a stale id (the item was removed) falls back to the first member.
+        CollectionMember? chosen = collection?.CoverMemberItemId is int itemId
+            ? members.FirstOrDefault(m => m.CollectionItemId == itemId)
+            : null;
+        return new CollectionCoverHint(manual, chosen ?? members.FirstOrDefault());
     }
 
     private static string IssueDisplayTitle(Issue issue)

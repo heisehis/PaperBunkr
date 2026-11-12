@@ -1,97 +1,237 @@
-<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:fi="using:FluentIcons.Avalonia"
-             xmlns:vm="using:Paperbunkr.App.ViewModels"
-             xmlns:m="using:Paperbunkr.App.Models"
-             xmlns:conv="using:Avalonia.Data.Converters"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
-             x:Class="Paperbunkr.App.Views.MetadataEntityDetailScreenView"
-             x:DataType="vm:MetadataEntityDetailScreenViewModel">
-
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:fi="using:FluentIcons.Avalonia" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels" xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:ep="using:Paperbunkr.App.ViewModels.EntityPages" xmlns:epv="using:Paperbunkr.App.Views.EntityPages"
+             xmlns:controls="using:Paperbunkr.App.Controls" xmlns:conv="using:Avalonia.Data.Converters"
+             x:Class="Paperbunkr.App.Views.MetadataEntityDetailScreenView" x:DataType="vm:MetadataEntityDetailScreenViewModel"
+             controls:ContextMenuHost.Provider="{Binding}"
+             Background="{DynamicResource PbBgBrush}">
     <!--
-        One shared screen for Character/Team/Location/Creator/Publisher (docs/superpowers/specs/
-        2026-09-23-metron-api-utilization-design.md) - see the ViewModel's own doc comment for why
-        this is one screen, not five, and why there's no bio/image section (no hydration pipeline
-        populates one yet).
+        Entity pages (docs/superpowers/specs/2026-11-12-entity-pages-redesign-design.md): a hero band with the image, name, counts, actions and the
+        filter, then a tab strip and one tab panel at a time. The page ScrollViewer is the only scroller: the grids virtualize against it and no
+        list scrolls inside it. What changes per kind (image shape, main action, filter, tabs) comes from the view model's profile.
     -->
     <UserControl.Styles>
-        <Style Selector="Border.card">
-            <Setter Property="Margin" Value="0,0,0,6" />
-        </Style>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/ContinuityChrome.axaml" />
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/EntityPageChrome.axaml" />
     </UserControl.Styles>
-
-    <ScrollViewer>
-        <StackPanel Margin="0,0,0,40">
-            <Button Classes="backLink" Command="{Binding NavigateBackCommand}" Margin="24,20,24,12">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
-                    <TextBlock Text="Back" VerticalAlignment="Center" />
+    <ScrollViewer x:Name="PageScroller" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="16" Margin="0,0,0,40">
+            <controls:HeroBand CoverKeys="{Binding CollageKeys}">
+                <StackPanel Spacing="12">
+                    <Button Classes="ghost backLink" Content="Back" Command="{Binding NavigateBackCommand}" HorizontalAlignment="Left" />
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="20">
+                        <!-- Image slot: shape per kind; a publisher's brand mark replaces both the image and the name. -->
+                        <Border x:Name="HeroImage" Classes="heroImage" Classes.wide="{Binding IsWideImage}" Classes.squircle="{Binding IsSquircleImage}" IsVisible="{Binding !IsBrandMark}">
+                            <Panel>
+                                <TextBlock Classes="pbTextHeading entityMonogram" Text="{Binding Initials}" IsVisible="{Binding ShowInitials}" />
+                                <Image views:AsyncEntityImage.Path="{Binding ImagePath}" views:AsyncEntityImage.Revision="{Binding ImageRevision}" Stretch="UniformToFill" IsVisible="{Binding HasImage}" />
+                                <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" IsVisible="{Binding HasCover}" />
+                            </Panel>
+                        </Border>
+                        <!-- Only a real logo: a publisher without one keeps its name as the heading instead. -->
+                        <controls:BrandMark x:Name="HeroBrand" Family="Publisher" Value="{Binding Name}" MarkSize="64" MaxMarkWidth="200" ShowText="False" EnsureContrast="True" VerticalAlignment="Top">
+                            <controls:BrandMark.IsVisible>
+                                <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                    <Binding Path="IsBrandMark" />
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.Or}">
+                                        <Binding Path="IsImage" ElementName="HeroBrand" />
+                                        <Binding Path="IsRaster" ElementName="HeroBrand" />
+                                    </MultiBinding>
+                                </MultiBinding>
+                            </controls:BrandMark.IsVisible>
+                        </controls:BrandMark>
+                        <StackPanel Grid.Column="1" Spacing="8" MaxWidth="900" HorizontalAlignment="Left">
+                            <TextBlock Classes="pbTextOverline" Text="{Binding KindLabel}" />
+                            <TextBlock Classes="pbTextHeading" Text="{Binding Name}" TextWrapping="Wrap" IsVisible="{Binding !#HeroBrand.IsVisible}" />
+                            <TextBlock Classes="pbTextMeta" Text="{Binding AliasLabel}" IsVisible="{Binding HasAliases}" TextWrapping="Wrap" />
+                            <TextBlock Classes="pbTextMeta" Text="{Binding Counts}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Classes="pbTextBody" Text="{Binding Description}" IsVisible="{Binding HasDescription}" MaxWidth="720" HorizontalAlignment="Left" TextWrapping="Wrap" MaxLines="{Binding DescriptionMaxLines}" TextTrimming="CharacterEllipsis" />
+                            <Button Classes="ghost sm" Content="{Binding DescriptionToggle}" Command="{Binding ToggleDescriptionCommand}" IsVisible="{Binding HasDescription}" HorizontalAlignment="Left" />
+                            <TextBlock Classes="pbTextMeta" Text="{Binding ProfileNote}" IsVisible="{Binding HasProfileNote}" TextWrapping="Wrap" />
+                            <WrapPanel IsEnabled="{Binding !IsLoading}">
+                                <Button x:Name="PrimaryAction" Classes="primary" Content="{Binding PrimaryLabel}" Command="{Binding PrimaryCommand}" Margin="0,0,8,8" />
+                                <Button Classes="secondary" Content="Save as reading list" Command="{Binding SaveAsReadingListCommand}" IsVisible="{Binding ShowSaveAsList}" Margin="0,0,8,8" />
+                                <Button Classes="secondary" Content="Show in Library" Command="{Binding ShowLibraryCommand}" IsVisible="{Binding ShowSecondaryLibrary}" Margin="0,0,8,8" />
+                                <Button x:Name="ManageButton" Classes="iconButton" AutomationProperties.Name="Manage" ToolTip.Tip="Manage" Margin="0,0,8,8">
+                                    <fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeSm}" />
+                                    <!-- A plain menu like the Continuity page's Manage; the image picker is too wide for a menu, so "Change image…" opens it
+                                         in its own flyout on the same button (the picker's own sizing, as before the redesign). -->
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                            <MenuItem Header="Open on the map" Command="{Binding OpenOnMapCommand}" IsVisible="{Binding ShowMapInManage}" />
+                                            <MenuItem Header="Change image…" Click="OnChangeImage" IsVisible="{Binding CanChangeImage}" />
+                                            <MenuItem Header="Reset image" Command="{Binding ResetImageCommand}" IsVisible="{Binding HasCustomImage}" />
+                                            <MenuItem Header="Refresh profile" Command="{Binding RefreshProfileCommand}" IsVisible="{Binding CanChangeImage}" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                    <FlyoutBase.AttachedFlyout>
+                                        <Flyout Placement="BottomEdgeAlignedLeft">
+                                            <views:CoverPickerView DataContext="{Binding ImagePicker}" />
+                                        </Flyout>
+                                    </FlyoutBase.AttachedFlyout>
+                                </Button>
+                            </WrapPanel>
+                            <!-- Filter: one continuity switch, or the picker above five continuities; a creator's role chips. -->
+                            <Border Classes="segGroup" HorizontalAlignment="Left" IsVisible="{Binding UseContinuitySegments}" IsEnabled="{Binding !IsLoading}">
+                                <ItemsControl ItemsSource="{Binding ContinuityChoices}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate><DataTemplate x:DataType="vm:EntityContinuityChoice">
+                                        <Button Classes="segItem" Classes.active="{Binding IsSelected}" Content="{Binding Label}" Command="{Binding ChooseCommand}" />
+                                    </DataTemplate></ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+                            <controls:SuggestBox Suggestions="{Binding ContinuityNames}" Text="{Binding SelectedContinuityName, Mode=TwoWay}" IsStrict="True" IsVisible="{Binding UseContinuityPicker}"
+                                                 MaxWidth="360" HorizontalAlignment="Left" AutomationProperties.Name="Continuity" />
+                            <ItemsControl ItemsSource="{Binding RoleChips}" IsVisible="{Binding ShowRoleChips}" IsEnabled="{Binding !IsLoading}" AutomationProperties.Name="Roles">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate><DataTemplate x:DataType="ep:EntityFilterChip">
+                                    <Button Classes="filterChip" Classes.active="{Binding IsSelected}" Content="{Binding Label}" Command="{Binding ChooseCommand}" Margin="0,0,8,8" />
+                                </DataTemplate></ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
                 </StackPanel>
-            </Button>
+            </controls:HeroBand>
 
-            <StackPanel Margin="24,0,24,0" Spacing="2">
-                <Border Classes="pbChip" Padding="8,4" HorizontalAlignment="Left">
-                    <TextBlock Text="{Binding KindLabel}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
-                </Border>
-                <TextBlock Text="{Binding Name}" FontSize="26" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" Margin="0,6,0,0" />
-            </StackPanel>
+            <StackPanel Margin="28,0" Spacing="16">
+                <!-- Tabs: fixed order, each kind's tabs a subsequence of it (see the view model's Tabs partial). -->
+                <StackPanel x:Name="TabStripPanel" Orientation="Horizontal" Spacing="20">
+                    <Button Classes="tab" Classes.active="{Binding OverviewTab.IsSelected}" Content="{Binding OverviewTab.Text}" Command="{Binding OverviewTab.SelectCommand}" IsVisible="{Binding OverviewTab.IsVisible}" />
+                    <Button Classes="tab" Classes.active="{Binding CareerTab.IsSelected}" Content="{Binding CareerTab.Text}" Command="{Binding CareerTab.SelectCommand}" IsVisible="{Binding CareerTab.IsVisible}" />
+                    <Button Classes="tab" Classes.active="{Binding AppearancesTab.IsSelected}" Content="{Binding AppearancesTab.Text}" Command="{Binding AppearancesTab.SelectCommand}" IsVisible="{Binding AppearancesTab.IsVisible}" />
+                    <Button Classes="tab" Classes.active="{Binding CreditsTab.IsSelected}" Content="{Binding CreditsTab.Text}" Command="{Binding CreditsTab.SelectCommand}" IsVisible="{Binding CreditsTab.IsVisible}" />
+                    <Button Classes="tab" Classes.active="{Binding SeriesTab.IsSelected}" Content="{Binding SeriesTab.Text}" Command="{Binding SeriesTab.SelectCommand}" IsVisible="{Binding SeriesTab.IsVisible}" />
+                    <Button Classes="tab" Classes.active="{Binding EventsTab.IsSelected}" Content="{Binding EventsTab.Text}" Command="{Binding EventsTab.SelectCommand}" IsVisible="{Binding EventsTab.IsVisible}" />
+                    <Button Classes="tab" Classes.active="{Binding ContinuitiesTab.IsSelected}" Content="{Binding ContinuitiesTab.Text}" Command="{Binding ContinuitiesTab.SelectCommand}" IsVisible="{Binding ContinuitiesTab.IsVisible}" />
+                    <Button Classes="tab" Classes.active="{Binding CharactersTab.IsSelected}" Content="{Binding CharactersTab.Text}" Command="{Binding CharactersTab.SelectCommand}" IsVisible="{Binding CharactersTab.IsVisible}" />
+                </StackPanel>
 
-            <StackPanel Margin="24,20,24,0" Spacing="16">
+                <TextBlock Classes="pbTextMeta" Text="Loading…" IsVisible="{Binding IsLoading}" />
+                <TextBlock Classes="pbTextBody" Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}" TextWrapping="Wrap" />
+                <TextBlock Classes="pbTextBody" Text="{Binding EmptyMessage}" IsVisible="{Binding IsEmpty}" TextWrapping="Wrap" />
 
-                <!-- Character/Team/Location/Creator: issues this entity appears in -->
-                <StackPanel Spacing="8" IsVisible="{Binding !IsPublisher}">
-                    <TextBlock Text="APPEARS IN" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
-                    <TextBlock Text="No linked issues yet." Foreground="{DynamicResource PbTextMutedBrush}"
-                               IsVisible="{Binding !HasAppearances}" />
-                    <ItemsControl ItemsSource="{Binding Appearances}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="m:MetadataEntityAppearanceRow">
-                                <Border Classes="card" Padding="14,10">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <StackPanel Grid.Column="0" Spacing="2">
-                                            <TextBlock Text="{Binding IssueLabel}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                                            <TextBlock Text="{Binding Role}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
-                                                       IsVisible="{Binding Role, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                                            <Button Content="Open series" Classes="ghost"
-                                                    Command="{Binding $parent[UserControl].((vm:MetadataEntityDetailScreenViewModel)DataContext).OpenSeriesCommand}"
-                                                    CommandParameter="{Binding SeriesId}" />
-                                            <Button Content="Read" Classes="primary"
-                                                    Command="{Binding $parent[UserControl].((vm:MetadataEntityDetailScreenViewModel)DataContext).OpenIssueCommand}"
-                                                    CommandParameter="{Binding IssueId}" />
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
+                <!-- Overview (characters, teams, locations): fixed and short whatever the size of the entity. -->
+                <StackPanel x:Name="OverviewPanel" Spacing="16" IsVisible="{Binding ShowOverviewTab}" controls:Replace.On="{Binding ShowOverviewTab}">
+                    <StackPanel Spacing="12" IsVisible="{Binding HasRelated}">
+                        <TextBlock Classes="pbTextSection" Text="{Binding RelatedTitle}" />
+                        <ItemsControl x:Name="RelatedStrip" ItemsSource="{Binding Related}" AutomationProperties.Name="{Binding RelatedTitle}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemSpacing="12" LineSpacing="12" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate><DataTemplate x:DataType="ep:EntityTileItem">
+                                <epv:EntityTile Command="{Binding $parent[views:MetadataEntityDetailScreenView].((vm:MetadataEntityDetailScreenViewModel)DataContext).OpenTileCommand}" />
+                            </DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    <Grid ColumnDefinitions="3*,2*" ColumnSpacing="16">
+                        <Border Classes="card" VerticalAlignment="Top" IsVisible="{Binding HasEvents}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="pbTextSection" Text="{Binding EventsTitle}" />
+                                <ItemsControl ItemsSource="{Binding EventsShown}">
+                                    <ItemsControl.ItemTemplate><DataTemplate x:DataType="vm:EntityPageLink"><epv:EntityEventRow /></DataTemplate></ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Classes="ghost sm" Content="{Binding MoreEventsLabel}" Command="{Binding ShowMoreEventsCommand}" IsVisible="{Binding HasMoreEvents}" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="{Binding YearCardColumn}" Classes="card" VerticalAlignment="Top" IsVisible="{Binding YearChart.HasColumns}">
+                            <StackPanel Spacing="12">
+                                <TextBlock Classes="pbTextSection" Text="{Binding YearChartTitle}" />
+                                <epv:YearColumnChart DataContext="{Binding YearChart}" />
+                                <StackPanel Spacing="8" IsVisible="{Binding HasFirstAppearance}">
+                                    <TextBlock Classes="pbTextMeta" Text="First appearance in your library" />
+                                    <ContentControl Content="{Binding FirstAppearance}">
+                                        <ContentControl.ContentTemplate><DataTemplate x:DataType="vm:EntityPageLink">
+                                            <Button Classes="entityCell" Command="{Binding OpenCommand}" AutomationProperties.Name="{Binding Name}" ToolTip.Tip="{Binding Name}">
+                                                <Grid ColumnDefinitions="36,*" ColumnSpacing="12">
+                                                    <Border Classes="eventThumb"><Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" /></Border>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                                        <TextBlock Classes="pbTextBody" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Classes="pbTextCaption" Text="{Binding Detail}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate></ContentControl.ContentTemplate>
+                                    </ContentControl>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Career (creators): runs along the years, then the people they work with. -->
+                <StackPanel x:Name="CareerPanel" Spacing="16" IsVisible="{Binding ShowCareerTab}" controls:Replace.On="{Binding ShowCareerTab}">
+                    <Border Classes="card" IsVisible="{Binding HasCareerRuns}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Classes="pbTextSection" Text="Runs" />
+                            <epv:CareerTimeline x:Name="Career" Items="{Binding CareerRuns}" AxisStart="{Binding CareerAxisStart}" AxisEnd="{Binding CareerAxisEnd}" />
+                        </StackPanel>
+                    </Border>
+                    <StackPanel Spacing="12" IsVisible="{Binding HasRelated}">
+                        <TextBlock Classes="pbTextSection" Text="{Binding RelatedTitle}" />
+                        <ItemsControl ItemsSource="{Binding Related}" AutomationProperties.Name="{Binding RelatedTitle}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemSpacing="12" LineSpacing="12" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate><DataTemplate x:DataType="ep:EntityTileItem">
+                                <epv:EntityTile Shape="Squircle" Command="{Binding $parent[views:MetadataEntityDetailScreenView].((vm:MetadataEntityDetailScreenViewModel)DataContext).OpenTileCommand}" />
+                            </DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    <Border Classes="card" IsVisible="{Binding YearChart.HasColumns}" Width="560" HorizontalAlignment="Left">
+                        <StackPanel Spacing="12">
+                            <TextBlock Classes="pbTextSection" Text="{Binding YearChartTitle}" />
+                            <epv:YearColumnChart DataContext="{Binding YearChart}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Appearances / Credits: every issue, sortable, optionally unread only. -->
+                <StackPanel x:Name="AppearancesPanel" Spacing="16" IsVisible="{Binding ShowAppearancesTab}" controls:Replace.On="{Binding ShowAppearancesTab}">
+                    <WrapPanel>
+                        <Border Classes="segGroup" Margin="0,0,12,8">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Classes="segItem" Classes.active="{Binding SortsByReadingOrder}" Content="Reading order" Command="{Binding SortAppearancesCommand}" CommandParameter="{x:Static ep:AppearanceSort.ReadingOrder}" />
+                                <Button Classes="segItem" Classes.active="{Binding SortsByNewest}" Content="Newest" Command="{Binding SortAppearancesCommand}" CommandParameter="{x:Static ep:AppearanceSort.Newest}" />
+                                <Button Classes="segItem" Classes.active="{Binding SortsBySeries}" Content="Series" Command="{Binding SortAppearancesCommand}" CommandParameter="{x:Static ep:AppearanceSort.Series}" />
+                            </StackPanel>
+                        </Border>
+                        <ToggleButton Classes="filterChip" Content="Unread only" IsChecked="{Binding UnreadOnly}" Margin="0,0,12,8" />
+                    </WrapPanel>
+                    <epv:EntityPosterGrid x:Name="AppearancesGrid" Items="{Binding VisibleAppearances}" Label="Appearances" />
+                </StackPanel>
+
+                <!-- Series: posters with read progress (a publisher's are filtered by imprint). -->
+                <StackPanel x:Name="SeriesPanel" Spacing="16" IsVisible="{Binding ShowSeriesTab}" controls:Replace.On="{Binding ShowSeriesTab}">
+                    <ItemsControl ItemsSource="{Binding ImprintChips}" IsVisible="{Binding ShowImprintChips}" AutomationProperties.Name="Imprints">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate><DataTemplate x:DataType="ep:EntityFilterChip">
+                            <Button Classes="filterChip" Classes.active="{Binding IsSelected}" Content="{Binding Label}" Command="{Binding ChooseCommand}" Margin="0,0,8,8" />
+                        </DataTemplate></ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <epv:EntityPosterGrid x:Name="SeriesGrid" Items="{Binding SeriesCards}" Label="Series" />
+                    <Border Classes="card" IsVisible="{Binding IsPublisher}" Width="560" HorizontalAlignment="Left">
+                        <StackPanel Spacing="12" IsVisible="{Binding YearChart.HasColumns}">
+                            <TextBlock Classes="pbTextSection" Text="{Binding YearChartTitle}" />
+                            <epv:YearColumnChart DataContext="{Binding YearChart}" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
-                <!-- Publisher: series it publishes (no per-issue appearance table - single-valued, see Publisher's own doc comment) -->
-                <StackPanel Spacing="8" IsVisible="{Binding IsPublisher}">
-                    <TextBlock Text="PUBLISHES" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
-                    <TextBlock Text="No linked series yet." Foreground="{DynamicResource PbTextMutedBrush}"
-                               IsVisible="{Binding !HasPublishedSeries}" />
-                    <ItemsControl ItemsSource="{Binding PublishedSeries}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="m:MetadataEntitySeriesRow">
-                                <Border Classes="card" Padding="14,10">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <TextBlock Grid.Column="0" Text="{Binding SeriesName}" FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                        <Button Grid.Column="1" Content="Open series" Classes="ghost"
-                                                Command="{Binding $parent[UserControl].((vm:MetadataEntityDetailScreenViewModel)DataContext).OpenSeriesCommand}"
-                                                CommandParameter="{Binding SeriesId}" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
+                <!-- Events (characters, teams): every event in reading order. -->
+                <ItemsControl x:Name="EventsPanel" ItemsSource="{Binding Events}" IsVisible="{Binding ShowEventsTab}" controls:Replace.On="{Binding ShowEventsTab}" MaxWidth="760" HorizontalAlignment="Left"
+                              AutomationProperties.Name="Events">
+                    <ItemsControl.ItemTemplate><DataTemplate x:DataType="vm:EntityPageLink"><epv:EntityEventRow /></DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
 
+                <!-- Continuities (publishers). -->
+                <ItemsControl x:Name="ContinuitiesPanel" ItemsSource="{Binding Continuities}" IsVisible="{Binding ShowContinuitiesTab}" controls:Replace.On="{Binding ShowContinuitiesTab}" MaxWidth="760" HorizontalAlignment="Left"
+                              AutomationProperties.Name="Continuities">
+                    <ItemsControl.ItemTemplate><DataTemplate x:DataType="vm:EntityPageLink"><epv:EntityEventRow /></DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Characters (publishers): the most-seen characters. -->
+                <ItemsControl x:Name="CharactersPanel" ItemsSource="{Binding Related}" IsVisible="{Binding ShowCharactersTab}" controls:Replace.On="{Binding ShowCharactersTab}" AutomationProperties.Name="Characters">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemSpacing="12" LineSpacing="12" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate><DataTemplate x:DataType="ep:EntityTileItem">
+                        <epv:EntityTile Command="{Binding $parent[views:MetadataEntityDetailScreenView].((vm:MetadataEntityDetailScreenViewModel)DataContext).OpenTileCommand}" />
+                    </DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

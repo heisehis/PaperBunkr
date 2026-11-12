@@ -57,4 +57,28 @@ public class TagPillContextMenuBuilderTests
         Assert.Null(builder.Build(new object()));
         Assert.Null(builder.Build(null));
     }
+
+    [Fact]
+    public void Build_EntityPill_OffersOpenAndLibrarySearch_ThenWeights()
+    {
+        string? searched = null, opened = null;
+        var pill = new TagPillViewModel("Storm", "Characters", IssueTagWeight.Unset, search: v => opened = v, reweight: _ => { })
+            { EntityKind = Paperbunkr.Data.Entities.ComicMetadataEntityKind.Character, SearchLibrary = v => searched = v };
+
+        var entries = new TagPillContextMenuBuilder().Build(pill)!;
+
+        Assert.Equal(new[] { "Open Storm", "Search library", null, "Incidental", "Recurrent", "Defining", "Core" }, entries.Select(e => e.Header));
+        entries[0].Command!.Execute(null);
+        entries[1].Command!.Execute(null);
+        Assert.Equal("Storm", opened);
+        Assert.Equal("Storm", searched);
+    }
+
+    [Fact]
+    public void Build_EntityPillThatCantBeReweighted_StillHasAMenu()
+    {
+        var pill = new TagPillViewModel("Claremont", null, IssueTagWeight.Unset, search: _ => { }, reweight: null)
+            { EntityKind = Paperbunkr.Data.Entities.ComicMetadataEntityKind.Creator, SearchLibrary = _ => { } };
+        Assert.Equal(new[] { "Open Claremont", "Search library" }, new TagPillContextMenuBuilder().Build(pill)!.Select(e => e.Header));
+    }
 }

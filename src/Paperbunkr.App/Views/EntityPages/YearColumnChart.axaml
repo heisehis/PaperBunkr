@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ep="using:Paperbunkr.App.ViewModels.EntityPages"
+             x:Class="Paperbunkr.App.Views.EntityPages.YearColumnChart"
+             x:DataType="ep:YearChartModel">
+    <!-- Appearances by year as columns (entity pages redesign §5.4): one column per dated year, the first and last years under the axis,
+         undated issues as a note. Not interactive and not animated (motion rules: no chart sweeps). -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/EntityPageChrome.axaml" />
+    </UserControl.Styles>
+    <StackPanel Spacing="4">
+        <ItemsControl x:Name="Columns" ItemsSource="{Binding Columns}" Height="64" IsVisible="{Binding HasColumns}" AutomationProperties.Name="Appearances by year">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="ep:YearColumn">
+                    <Panel Background="Transparent" ToolTip.Tip="{Binding Tip}">
+                        <Border Classes="yearBar" Height="{Binding BarHeight}" />
+                    </Panel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Grid ColumnDefinitions="Auto,*,Auto">
+            <TextBlock Classes="pbTextCaption" Text="{Binding FirstLabel}" />
+            <TextBlock Grid.Column="1" Classes="pbTextCaption" Text="{Binding Note}" IsVisible="{Binding HasNote}" HorizontalAlignment="Center" />
+            <TextBlock Grid.Column="2" Classes="pbTextCaption" Text="{Binding LastLabel}" />
+        </Grid>
+    </StackPanel>
+</UserControl>

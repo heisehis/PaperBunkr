@@ -86,6 +86,7 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
     public string? LanguageIso { get; init; }
     public string? AgeRating { get; init; }
     public string? StoryArc { get; init; }
+    public string? MainCharacterOrTeam { get; init; }
     public string? SeriesGroup { get; init; }
     public string? FilePath { get; init; }
     public string? Summary { get; init; }
@@ -337,6 +338,7 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
         Editor = issue.Editor,
         Translator = issue.Translator,
         Characters = issue.MainCharacterOrTeam,
+        MainCharacterOrTeam = issue.MainCharacterOrTeam,
         Teams = issue.Teams,
         Locations = issue.Locations,
         BookPrice = issue.BookPrice,

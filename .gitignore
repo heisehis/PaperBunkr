@@ -24,3 +24,10 @@ src/Paperbunkr.App.Tests/TestResults/
 # BenchmarkDotNet run output
 BenchmarkDotNet.Artifacts/
 **/BenchmarkDotNet.Artifacts/
+
+# Local launch-video renders, social media renders and test-run logs
+brag-output*/
+social/media/
+.series-*.log
+__pycache__/
+artifacts/map-room/*.trx

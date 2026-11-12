@@ -120,7 +120,7 @@ public class ComicMetadataExternalIdSyncTests : IDisposable
     [Fact]
     public void SyncFromIssueDetails_CreatorExternalId_OnlyAttachedWhenCreditCarriesOne()
     {
-        // Metron credits never carry a creator external id (confirmed during design) - RoleExternalId
+        // A credit can lack its creator id in an older/incomplete payload - RoleExternalId
         // being set doesn't mean CreatorExternalId is, and this must not attach a Creator external id
         // from Metron data.
         using var context = new PaperbunkrDbContext(_dbOptions);
@@ -129,6 +129,17 @@ public class ComicMetadataExternalIdSyncTests : IDisposable
         ComicMetadataExternalIdSync.SyncFromIssueDetails(context, issueId, ComicProvider.Metron, Details());
 
         Assert.Empty(context.ComicMetadataExternalIds.Where(e => e.EntityKind == ComicMetadataEntityKind.Creator));
+    }
+
+    [Fact]
+    public void SyncFromIssueDetails_MetronCreatorId_IsPersistedSeparatelyFromRoleId()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int issueId = SeedAppliedIssue(context);
+        var details = Details() with { Credits = new[] { new ComicVineCredit("Ta-Nehisi Coates", "Writer", CreatorExternalId: 42, RoleExternalId: 1) } };
+        ComicMetadataExternalIdSync.SyncFromIssueDetails(context, issueId, ComicProvider.Metron, details);
+        var external = Assert.Single(context.ComicMetadataExternalIds.Where(e => e.EntityKind == ComicMetadataEntityKind.Creator));
+        Assert.Equal("42", external.ExternalId); Assert.Equal(ComicProvider.Metron, external.Provider);
     }
 
     [Fact]

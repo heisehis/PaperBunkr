@@ -7,273 +7,161 @@ using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.Data.Metadata;
 
-/// <summary>One relationally-anchored recommendation candidate (docs/superpowers/specs/2026-08-18-metadata-model-phase6a-recommendation-engine-design.md) - computed live, not persisted (see the spec's "Live-computed, not a persisted table" section for why).</summary>
-public sealed record RecommendationCandidate(
-    int SourceSeriesId,
-    int TargetSeriesId,
-    RecommendationReason ReasonType,
-    decimal Score,
-    string Explanation,
-    DateTime GeneratedAt,
-    RecommendationSignals Signals);
+public sealed record RecommendationCandidate(int SourceSeriesId, int TargetSeriesId, RecommendationReason ReasonType,
+    decimal Score, string Explanation, DateTime GeneratedAt, RecommendationSignals Signals);
+public sealed record RecommendationSignals(decimal RelationScore, decimal ContinuityScore, decimal EventScore, decimal CollectionScore,
+    decimal CharacterScore, decimal CreatorScore, decimal GenreScore, decimal TagScore, decimal PublisherScore = 0, decimal EraScore = 0);
 
-/// <summary>Per-signal breakdown (§47: "expose separate signals," not one opaque number) - also what <see cref="RecommendationCandidate.ReasonType"/> is picked from.</summary>
-public sealed record RecommendationSignals(
-    decimal RelationScore,
-    decimal ContinuityScore,
-    decimal EventScore,
-    decimal CollectionScore,
-    decimal CharacterScore,
-    decimal CreatorScore,
-    decimal GenreScore,
-    decimal TagScore);
-
-/// <summary>
-/// Read-only recommendation engine (docs/superpowers/specs/2026-08-18-metadata-model-phase6a-
-/// recommendation-engine-design.md). The candidate pool is relationally-anchored: a target series
-/// only appears if it shares a <see cref="MediaRelation"/>, <see cref="Continuity"/>, or
-/// <see cref="StoryEvent"/> membership with the source - content-similarity signals (genre/
-/// character/creator/tag overlap) refine an already-anchored candidate's score and explanation, they
-/// never independently surface an otherwise-unrelated series.
-/// </summary>
+/// <summary>Local, read-only recommendations. Scalar/index projections discover candidates; only the best 200 get a full score.</summary>
 public static class RecommendationResolver
 {
-    // Rebalanced to make room for CollectionWeight (still summing to 1.0): Relation 0.30->0.25,
-    // Continuity/Event 0.15->0.10 each - a Collection is at least as deliberate an editorial anchor
-    // as Continuity/Event membership (the user hand-picks every member), so it gets a comparable
-    // weight rather than being tacked on as an afterthought.
-    private const decimal RelationWeight = 0.25m;
-    private const decimal ContinuityWeight = 0.10m;
-    private const decimal EventWeight = 0.10m;
-    private const decimal CollectionWeight = 0.15m;
-    private const decimal CharacterWeight = 0.15m;
-    private const decimal CreatorWeight = 0.10m;
-    private const decimal GenreWeight = 0.10m;
-    private const decimal TagWeight = 0.05m;
+    public const int CandidateLimit = 200;
+    public static IReadOnlyDictionary<string, decimal> Weights { get; } = new Dictionary<string, decimal>
+    {
+        ["creator"] = .20m, ["character"] = .15m, ["relation"] = .15m, ["tag"] = .10m, ["genre"] = .10m,
+        ["continuity"] = .10m, ["publisher"] = .05m, ["era"] = .05m, ["event"] = .05m, ["collection"] = .05m,
+    };
 
     public static IReadOnlyList<RecommendationCandidate> GetRecommendations(PaperbunkrDbContext context, int seriesId, int limit = 10)
     {
-        var source = context.Series.FirstOrDefault(s => s.Id == seriesId);
-        if (source is null)
+        if (limit <= 0) return Array.Empty<RecommendationCandidate>();
+        var metadata = context.Series.AsNoTracking().Where(s => s.Issues.Any(i => !i.IsPlaceholder))
+            .Select(s => new { s.Id, s.Name, s.Genre, s.Publisher, s.Imprint }).ToDictionary(s => s.Id);
+        if (!metadata.TryGetValue(seriesId, out var source)) return Array.Empty<RecommendationCandidate>();
+
+        // These are bounded scalar rows, not tracked graphs with thousands of Issues/Tags/Creators materialised per series.
+        var characters = context.CharacterAppearances.AsNoTracking().Where(a => !a.Issue!.IsPlaceholder)
+            .Select(a => new { a.Issue!.SeriesId, a.CharacterId }).Distinct().ToList()
+            .GroupBy(a => a.SeriesId).ToDictionary(g => g.Key, g => g.Select(a => a.CharacterId).ToHashSet());
+        var credits = context.CreatorCredits.AsNoTracking().Where(c => !c.Issue!.IsPlaceholder)
+            .Select(c => new { c.Issue!.SeriesId, c.CreatorId, c.Role }).Distinct().ToList().GroupBy(c => c.SeriesId)
+            .ToDictionary(g => g.Key, g => g.GroupBy(c => c.CreatorId).ToDictionary(c => c.Key,
+                c => c.Any(r => r.Role is "Writer" or "Artist" or "Penciller") ? 2m : 1m));
+        var writerIds = context.CreatorCredits.AsNoTracking().Where(c => c.Role == "Writer" && !c.Issue!.IsPlaceholder)
+            .Select(c => new { c.Issue!.SeriesId, c.CreatorId }).Distinct().ToList().ToLookup(c => c.SeriesId, c => c.CreatorId);
+        var tags = context.IssueTags.AsNoTracking().Where(t => !t.Issue!.IsPlaceholder)
+            .Select(t => new { t.Issue!.SeriesId, t.Field, t.Value, t.Weight }).ToList();
+        var weightedTags = tags.Where(t => t.Field == IssueTagField.Tags).GroupBy(t => t.SeriesId)
+            .ToDictionary(g => g.Key, g => g.GroupBy(t => t.Value.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(t => t.Key, t => t.Max(v => TagWeight(v.Weight)), StringComparer.OrdinalIgnoreCase));
+        var genres = metadata.Values.ToDictionary(s => s.Id, s => CharacterResolver.ParseNames(s.Genre).ToHashSet(StringComparer.OrdinalIgnoreCase));
+        foreach (var tag in tags.Where(t => t.Field == IssueTagField.Genre))
+            if (genres.TryGetValue(tag.SeriesId, out var genre)) genre.Add(tag.Value.Trim());
+        var publicationRows = context.Issues.AsNoTracking().Where(i => !i.IsPlaceholder)
+            .Select(i => new { i.SeriesId, i.Year, i.Publisher, i.Imprint }).ToList().ToLookup(i => i.SeriesId);
+        string? Dominant(IEnumerable<string?> values, string? fallback) => values.Where(v => !string.IsNullOrWhiteSpace(v))
+            .GroupBy(v => v!.Trim(), StringComparer.OrdinalIgnoreCase).OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.Key).FirstOrDefault() ?? fallback;
+        // Issue metadata is the editable source of truth; the legacy series publisher is only a fallback.
+        var publication = metadata.Values.ToDictionary(s => s.Id, s => (
+            Publisher: Dominant(publicationRows[s.Id].Select(i => i.Publisher), s.Publisher),
+            Imprint: Dominant(publicationRows[s.Id].Select(i => i.Imprint), s.Imprint),
+            Year: publicationRows[s.Id].Where(i => i.Year > 0).Select(i => i.Year).DefaultIfEmpty(null).Min()));
+        var sourcePublication = publication[seriesId];
+        var continuityRows = context.ContinuityMemberships.AsNoTracking().Select(m => new { m.SeriesId, m.ContinuityId }).ToList();
+        var sourceContinuities = continuityRows.Where(m => m.SeriesId == seriesId).Select(m => m.ContinuityId).ToHashSet();
+        var continuityTargets = continuityRows.Where(m => sourceContinuities.Contains(m.ContinuityId)).Select(m => m.SeriesId).ToHashSet();
+        var eventRows = context.EventMemberships.AsNoTracking().Where(m => !m.Issue!.IsPlaceholder)
+            .Select(m => new { m.Issue!.SeriesId, m.StoryEventId }).Distinct().ToList();
+        var sourceEvents = eventRows.Where(m => m.SeriesId == seriesId).Select(m => m.StoryEventId).ToHashSet();
+        var eventTargets = eventRows.Where(m => sourceEvents.Contains(m.StoryEventId)).Select(m => m.SeriesId).ToHashSet();
+        var collectionTargets = CollectionResolver.GetOtherSeriesSharingCollection(context, seriesId).Select(s => s.Id).ToHashSet();
+        var relationEndpoints = MediaRelationResolver.GetRelatedFromSeries(context, seriesId).Where(r => r.Kind == MediaRelationEndpointKind.Series).ToList();
+        var relationIds = relationEndpoints.Select(r => r.MediaRelationId).ToList();
+        var evidence = context.MediaRelations.AsNoTracking().Include(r => r.Evidence).Where(r => relationIds.Contains(r.Id)).ToList()
+            .ToDictionary(r => r.Id, r => r.Evidence.Select(e => e.Confidence).DefaultIfEmpty(0m).Max());
+        var relations = relationEndpoints.GroupBy(r => r.Series!.Id).ToDictionary(g => g.Key,
+            g => g.OrderByDescending(r => evidence.GetValueOrDefault(r.MediaRelationId)).ThenBy(r => r.MediaRelationId).First());
+
+        var emptyIds = new HashSet<int>();
+        var emptyWeights = new Dictionary<int, decimal>();
+        var emptyTags = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        var sourceCharacters = characters.GetValueOrDefault(seriesId) ?? emptyIds;
+        var sourceCreators = credits.GetValueOrDefault(seriesId) ?? emptyWeights;
+        var sourceTags = weightedTags.GetValueOrDefault(seriesId) ?? emptyTags;
+        var sourceGenres = genres[seriesId];
+        var sourceWriters = writerIds[seriesId].ToHashSet();
+        bool Same(string? a, string? b) => !string.IsNullOrWhiteSpace(a) && string.Equals(a.Trim(), b?.Trim(), StringComparison.OrdinalIgnoreCase);
+
+        var pool = metadata.Values.Where(s => s.Id != seriesId).Select(target =>
         {
-            return Array.Empty<RecommendationCandidate>();
-        }
+            var targetCharacters = characters.GetValueOrDefault(target.Id) ?? emptyIds;
+            var targetCreators = credits.GetValueOrDefault(target.Id) ?? emptyWeights;
+            var targetTags = weightedTags.GetValueOrDefault(target.Id) ?? emptyTags;
+            var targetPublication = publication[target.Id];
+            int signals = (sourceCharacters.Overlaps(targetCharacters) ? 1 : 0) + (sourceCreators.Keys.Intersect(targetCreators.Keys).Any() ? 1 : 0)
+                + (sourceTags.Keys.Intersect(targetTags.Keys, StringComparer.OrdinalIgnoreCase).Any() ? 1 : 0)
+                + (sourceGenres.Overlaps(genres[target.Id]) ? 1 : 0) + (Same(sourcePublication.Publisher, targetPublication.Publisher) || Same(sourcePublication.Imprint, targetPublication.Imprint) ? 1 : 0)
+                + (relations.ContainsKey(target.Id) ? 1 : 0) + (continuityTargets.Contains(target.Id) ? 1 : 0)
+                + (eventTargets.Contains(target.Id) ? 1 : 0) + (collectionTargets.Contains(target.Id) ? 1 : 0);
+            return (Target: target, Signals: signals);
+        }).Where(c => c.Signals > 0).OrderByDescending(c => c.Signals).ThenBy(c => c.Target.Id).Take(CandidateLimit).ToList();
 
-        // Strongest MediaRelation per target (a pair can have more than one relation type), plus
-        // Continuity/Event anchoring - all three already-tested resolvers, reused as-is.
-        var relationsByTarget = MediaRelationResolver.GetRelatedFromSeries(context, seriesId)
-            .Where(r => r.Kind == MediaRelationEndpointKind.Series)
-            .GroupBy(r => r.Series!.Id)
-            .ToDictionary(g => g.Key, g => LoadStrongestEvidence(context, g));
-
-        var continuityTargetIds = ContinuityResolver.GetOtherSeriesSharingContinuity(context, seriesId)
-            .Select(s => s.Id)
-            .ToHashSet();
-
-        var eventTargetIds = EventMembershipResolver.GetOtherSeriesInSharedEvents(context, seriesId)
-            .Select(s => s.Id)
-            .ToHashSet();
-
-        var collectionTargetIds = CollectionResolver.GetOtherSeriesSharingCollection(context, seriesId)
-            .Select(s => s.Id)
-            .ToHashSet();
-
-        var candidateIds = relationsByTarget.Keys
-            .Union(continuityTargetIds)
-            .Union(eventTargetIds)
-            .Union(collectionTargetIds)
-            .ToList();
-
-        if (candidateIds.Count == 0)
+        var result = new List<RecommendationCandidate>();
+        foreach (var candidate in pool)
         {
-            return Array.Empty<RecommendationCandidate>();
-        }
-
-        var candidateSeries = context.Series
-            .Include(s => s.Issues).ThenInclude(i => i.Tags)
-            .Where(s => candidateIds.Contains(s.Id))
-            .ToDictionary(s => s.Id);
-
-        var sourceSeriesWithIssues = context.Series.Include(s => s.Issues).ThenInclude(i => i.Tags).First(s => s.Id == seriesId);
-        var sourceCharacters = AggregateTokens(sourceSeriesWithIssues.Issues, i => i.Characters);
-        var sourceCreators = AggregateCreatorTokens(sourceSeriesWithIssues.Issues);
-        var sourceTags = AggregateTokens(sourceSeriesWithIssues.Issues, i => i.JoinedTags());
-        var sourceGenre = TextTokenizer.Tokenize(sourceSeriesWithIssues.Genre);
-
-        DateTime generatedAt = DateTime.UtcNow;
-        var results = new List<RecommendationCandidate>();
-
-        foreach (int targetId in candidateIds)
-        {
-            if (!candidateSeries.TryGetValue(targetId, out var target))
+            var target = candidate.Target;
+            var targetCharacters = characters.GetValueOrDefault(target.Id) ?? emptyIds;
+            var targetCreators = credits.GetValueOrDefault(target.Id) ?? emptyWeights;
+            var targetTags = weightedTags.GetValueOrDefault(target.Id) ?? emptyTags;
+            var relation = relations.GetValueOrDefault(target.Id);
+            var targetPublication = publication[target.Id];
+            decimal publisher = Same(sourcePublication.Imprint, targetPublication.Imprint) ? 1m : Same(sourcePublication.Publisher, targetPublication.Publisher) ? .5m : 0m;
+            decimal era = sourcePublication.Year is int sourceYear && targetPublication.Year is int targetYear
+                ? EraScore(sourceYear, targetYear) : 0m;
+            var signals = new RecommendationSignals(relation is null ? 0 : evidence.GetValueOrDefault(relation.MediaRelationId),
+                continuityTargets.Contains(target.Id) ? 1 : 0, eventTargets.Contains(target.Id) ? 1 : 0, collectionTargets.Contains(target.Id) ? 1 : 0,
+                Jaccard(sourceCharacters, targetCharacters), WeightedOverlap(sourceCreators, targetCreators),
+                Jaccard(sourceGenres, genres[target.Id]), WeightedOverlap(sourceTags, targetTags, StringComparer.OrdinalIgnoreCase), publisher, era);
+            int sharedCharacters = sourceCharacters.Intersect(targetCharacters).Count();
+            bool sameWriter = writerIds[target.Id].Any(sourceWriters.Contains);
+            var reasons = new (string Key, decimal Value, RecommendationReason Reason, string Text)[]
             {
-                continue;
-            }
-
-            bool hasRelation = relationsByTarget.TryGetValue(targetId, out var relation);
-            decimal relationScore = hasRelation ? relation.Confidence : 0m;
-            RelationType? relationDisplayType = hasRelation ? relation.DisplayType : null;
-            decimal continuityScore = continuityTargetIds.Contains(targetId) ? 1.0m : 0m;
-            decimal eventScore = eventTargetIds.Contains(targetId) ? 1.0m : 0m;
-            decimal collectionScore = collectionTargetIds.Contains(targetId) ? 1.0m : 0m;
-
-            var targetCharacters = AggregateTokens(target.Issues, i => i.Characters);
-            var targetCreators = AggregateCreatorTokens(target.Issues);
-            var targetTags = AggregateTokens(target.Issues, i => i.JoinedTags());
-            var targetGenre = TextTokenizer.Tokenize(target.Genre);
-
-            decimal characterScore = OverlapRatio(sourceCharacters, targetCharacters);
-            decimal creatorScore = OverlapRatio(sourceCreators, targetCreators);
-            decimal genreScore = OverlapRatio(sourceGenre, targetGenre);
-            decimal tagScore = OverlapRatio(sourceTags, targetTags);
-
-            var signals = new RecommendationSignals(relationScore, continuityScore, eventScore, collectionScore, characterScore, creatorScore, genreScore, tagScore);
-
-            decimal finalScore =
-                relationScore * RelationWeight +
-                continuityScore * ContinuityWeight +
-                eventScore * EventWeight +
-                collectionScore * CollectionWeight +
-                characterScore * CharacterWeight +
-                creatorScore * CreatorWeight +
-                genreScore * GenreWeight +
-                tagScore * TagWeight;
-
-            var (reason, explanation) = DescribeDominantSignal(signals, relationDisplayType, target.Name, sourceCharacters, sourceCreators, sourceGenre, sourceTags, targetCharacters, targetCreators, targetGenre, targetTags);
-
-            results.Add(new RecommendationCandidate(seriesId, targetId, reason, finalScore, explanation, generatedAt, signals));
+                ("creator", signals.CreatorScore, RecommendationReason.SharedCreators, sameWriter ? "same writer" : "shared creators"),
+                ("character", signals.CharacterScore, RecommendationReason.SharedCharacters, $"{sharedCharacters} shared characters"),
+                ("relation", signals.RelationScore, RelationReason(relation?.DisplayType), RelationText(relation?.DisplayType)),
+                ("tag", signals.TagScore, RecommendationReason.SharedTags, "shared tags"),
+                ("genre", signals.GenreScore, RecommendationReason.SharedGenre, "shared genres"),
+                ("continuity", signals.ContinuityScore, RecommendationReason.SameContinuity, "same continuity"),
+                ("publisher", signals.PublisherScore, RecommendationReason.Related, publisher == 1 ? "same imprint" : "same publisher"),
+                ("era", signals.EraScore, RecommendationReason.Related, "similar publication era"),
+                ("event", signals.EventScore, RecommendationReason.SameEvent, "shared story events"),
+                ("collection", signals.CollectionScore, RecommendationReason.SameCollection, "same collection"),
+            };
+            var contributing = reasons.Where(r => r.Value > 0).OrderByDescending(r => r.Value * Weights[r.Key]).ToList();
+            result.Add(new RecommendationCandidate(seriesId, target.Id, contributing.First().Reason,
+                reasons.Sum(r => r.Value * Weights[r.Key]), string.Join(" · ", contributing.Take(3).Select(r => r.Text)), DateTime.UtcNow, signals));
         }
-
-        return results.OrderByDescending(r => r.Score).Take(limit).ToList();
+        return result.OrderByDescending(r => r.Score).ThenBy(r => r.TargetSeriesId).Take(limit).ToList();
     }
 
-    private static (RelationType DisplayType, decimal Confidence) LoadStrongestEvidence(
-        PaperbunkrDbContext context,
-        IEnumerable<MediaRelationEndpoint> relationsForTarget)
+    public static decimal EraScore(int sourceYear, int targetYear)
     {
-        var relationIds = relationsForTarget.Select(r => r.MediaRelationId).ToList();
-        var relations = context.MediaRelations
-            .Include(m => m.Evidence)
-            .Where(m => relationIds.Contains(m.Id))
-            .ToList();
-
-        var best = relations
-            .Select(m => (m.Id, Confidence: m.Evidence.Count > 0 ? m.Evidence.Max(e => e.Confidence) : 0m))
-            .OrderByDescending(x => x.Confidence)
-            .First();
-
-        RelationType displayType = relationsForTarget.First(r => r.MediaRelationId == best.Id).DisplayType;
-        return (displayType, best.Confidence);
+        int distance = Math.Abs(sourceYear - targetYear);
+        return distance <= 5 ? 1 : distance >= 15 ? 0 : (15m - distance) / 10m;
     }
-
-    private static (RecommendationReason Reason, string Explanation) DescribeDominantSignal(
-        RecommendationSignals signals,
-        RelationType? relationDisplayType,
-        string targetName,
-        HashSet<string> sourceCharacters, HashSet<string> sourceCreators, HashSet<string> sourceGenre, HashSet<string> sourceTags,
-        HashSet<string> targetCharacters, HashSet<string> targetCreators, HashSet<string> targetGenre, HashSet<string> targetTags)
+    private static decimal TagWeight(IssueTagWeight weight) => weight switch
+    { IssueTagWeight.Incidental => .25m, IssueTagWeight.Recurrent => .5m, IssueTagWeight.Defining => .75m, IssueTagWeight.Core => 1m, _ => .5m };
+    private static decimal Jaccard<T>(HashSet<T> a, HashSet<T> b)
     {
-        var weighted = new (string Signal, decimal Weighted)[]
+        int union = a.Union(b, a.Comparer).Count();
+        return union == 0 ? 0 : (decimal)a.Intersect(b, a.Comparer).Count() / union;
+    }
+    private static decimal WeightedOverlap<T>(Dictionary<T, decimal> a, Dictionary<T, decimal> b, IEqualityComparer<T>? comparer = null) where T : notnull
+    {
+        decimal intersection = 0, union = 0;
+        foreach (var key in a.Keys.Union(b.Keys, comparer))
         {
-            ("Relation", signals.RelationScore * RelationWeight),
-            ("Continuity", signals.ContinuityScore * ContinuityWeight),
-            ("Event", signals.EventScore * EventWeight),
-            ("Collection", signals.CollectionScore * CollectionWeight),
-            ("Character", signals.CharacterScore * CharacterWeight),
-            ("Creator", signals.CreatorScore * CreatorWeight),
-            ("Genre", signals.GenreScore * GenreWeight),
-            ("Tag", signals.TagScore * TagWeight),
-        };
-
-        string dominant = weighted.OrderByDescending(w => w.Weighted).First().Signal;
-
-        return dominant switch
-        {
-            "Relation" => (MapRelationType(relationDisplayType), ExplainRelation(relationDisplayType, targetName)),
-            "Continuity" => (RecommendationReason.SameContinuity, $"Shares continuity with {targetName}"),
-            "Event" => (RecommendationReason.SameEvent, $"Shares a story event with {targetName}"),
-            "Collection" => (RecommendationReason.SameCollection, $"In the same collection as {targetName}"),
-            "Character" => (RecommendationReason.SharedCharacters, $"Shares {Intersect(sourceCharacters, targetCharacters).Count} character(s) with {targetName}"),
-            "Creator" => (RecommendationReason.SharedCreators, $"Shares {Intersect(sourceCreators, targetCreators).Count} creator(s) with {targetName}"),
-            "Genre" => (RecommendationReason.SharedGenre, $"Shares {Intersect(sourceGenre, targetGenre).Count} genre(s) with {targetName}"),
-            "Tag" => (RecommendationReason.SharedTags, $"Shares {Intersect(sourceTags, targetTags).Count} tag(s) with {targetName}"),
-            _ => (RecommendationReason.Related, $"Related to {targetName}"),
-        };
-    }
-
-    private static RecommendationReason MapRelationType(RelationType? type) => type switch
-    {
-        RelationType.Prequel => RecommendationReason.Prequel,
-        RelationType.Sequel => RecommendationReason.Sequel,
-        RelationType.Crossover => RecommendationReason.Crossover,
-        RelationType.SameUniverse => RecommendationReason.SameUniverse,
-        RelationType.SharedUniverse => RecommendationReason.SameUniverse,
-        RelationType.SameContinuity => RecommendationReason.SameContinuity,
-        RelationType.SharedCharacters => RecommendationReason.SharedCharacters,
-        _ => RecommendationReason.Related,
-    };
-
-    /// <summary><paramref name="type"/> is the already-resolved display type for the target's own
-    /// role (per <see cref="MediaRelationResolver.GetRelatedSeries"/>'s doc comment) - e.g.
-    /// <see cref="RelationType.Sequel"/> means the *target* is the sequel, not the source.</summary>
-    private static string ExplainRelation(RelationType? type, string targetName) => type switch
-    {
-        RelationType.Prequel => $"{targetName} is a prequel",
-        RelationType.Sequel => $"{targetName} is a sequel",
-        RelationType.Crossover => $"Crossover with {targetName}",
-        RelationType.SameUniverse or RelationType.SharedUniverse => $"Same universe as {targetName}",
-        RelationType.SameContinuity => $"Same continuity as {targetName}",
-        RelationType.SharedCharacters => $"Shares characters with {targetName}",
-        _ => $"Related to {targetName}",
-    };
-
-    private static HashSet<string> Intersect(HashSet<string> a, HashSet<string> b)
-    {
-        var result = new HashSet<string>(a, StringComparer.OrdinalIgnoreCase);
-        result.IntersectWith(b);
-        return result;
-    }
-
-    private static decimal OverlapRatio(HashSet<string> a, HashSet<string> b)
-    {
-        if (a.Count == 0 || b.Count == 0)
-        {
-            return 0m;
+            decimal left = a.GetValueOrDefault(key), right = b.GetValueOrDefault(key);
+            intersection += Math.Min(left, right); union += Math.Max(left, right);
         }
-
-        var union = new HashSet<string>(a, StringComparer.OrdinalIgnoreCase);
-        union.UnionWith(b);
-
-        int intersectionCount = Intersect(a, b).Count;
-        return union.Count == 0 ? 0m : (decimal)intersectionCount / union.Count;
+        return union == 0 ? 0 : intersection / union;
     }
-
-    private static HashSet<string> AggregateTokens(IEnumerable<Issue> issues, Func<Issue, string?> selector)
-    {
-        var tokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var issue in issues)
-        {
-            tokens.UnionWith(TextTokenizer.Tokenize(selector(issue)));
-        }
-
-        return tokens;
-    }
-
-    private static HashSet<string> AggregateCreatorTokens(IEnumerable<Issue> issues)
-    {
-        var tokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var issue in issues)
-        {
-            tokens.UnionWith(TextTokenizer.Tokenize(issue.Writer));
-            tokens.UnionWith(TextTokenizer.Tokenize(issue.Penciller));
-            tokens.UnionWith(TextTokenizer.Tokenize(issue.Inker));
-            tokens.UnionWith(TextTokenizer.Tokenize(issue.Colorist));
-            tokens.UnionWith(TextTokenizer.Tokenize(issue.Letterer));
-            tokens.UnionWith(TextTokenizer.Tokenize(issue.CoverArtist));
-            tokens.UnionWith(TextTokenizer.Tokenize(issue.Editor));
-            tokens.UnionWith(TextTokenizer.Tokenize(issue.Translator));
-        }
-
-        return tokens;
-    }
+    private static RecommendationReason RelationReason(RelationType? type) => type switch
+    { RelationType.Prequel => RecommendationReason.Prequel, RelationType.Sequel => RecommendationReason.Sequel,
+      RelationType.Crossover => RecommendationReason.Crossover, RelationType.SameUniverse or RelationType.SharedUniverse => RecommendationReason.SameUniverse,
+      RelationType.SameContinuity => RecommendationReason.SameContinuity, _ => RecommendationReason.Related };
+    private static string RelationText(RelationType? type) => type switch
+    { RelationType.Prequel => "prequel", RelationType.Sequel => "sequel", RelationType.Crossover => "crossover",
+      RelationType.SameUniverse or RelationType.SharedUniverse => "same universe", _ => "related series" };
 }

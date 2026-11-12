@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="140" d:DesignHeight="210"
@@ -34,7 +35,11 @@
             <Border Grid.Row="0" Classes="posterCover" Classes.outlined="{Binding #ThisControl.Outlined}" Height="196" ClipToBounds="True" CornerRadius="{DynamicResource PbRadiusSm}">
                 <Grid>
                     <Image Source="{Binding #ThisControl.CoverSource}" Stretch="UniformToFill"
-                           IsVisible="{Binding #ThisControl.MosaicSources, Converter={x:Static conv:ObjectConverters.IsNull}}" />
+                           IsVisible="{Binding #ThisControl.ShowSingleCover}" />
+
+                    <!-- Fanned stack (docs/superpowers/specs/2026-11-06-collection-identity-design.md) - Collections cards with the Fan style. -->
+                    <controls:FanCoverStack Sources="{Binding #ThisControl.FanSources}"
+                                            IsVisible="{Binding #ThisControl.FanSources, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
 
                     <!-- 2x2 collage (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md C6) - Collections cards only. -->
                     <ItemsControl ItemsSource="{Binding #ThisControl.MosaicSources}"
@@ -50,6 +55,15 @@
                     </ItemsControl>
 
                     <Border Classes="posterScrim" />
+
+                    <!-- Collection read-progress ring (docs/superpowers/specs/2026-11-06-collection-identity-design.md) - opt-in, Collections cards only. -->
+                    <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="8" Padding="3" CornerRadius="{DynamicResource PbRadiusChip}"
+                            Background="{DynamicResource PbSurface2Brush}"
+                            IsVisible="{Binding #ThisControl.RingFraction, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                            ToolTip.Tip="{Binding #ThisControl.RingText}" AutomationProperties.Name="{Binding #ThisControl.RingText}">
+                        <controls:ProgressRing Width="18" Height="18" Value="{Binding #ThisControl.RingFraction}" StrokeThickness="2.5"
+                                               Foreground="{DynamicResource PbAccentBrush}" TrackBrush="{DynamicResource PbBorderBrush}" />
+                    </Border>
 
                     <!-- "NEW" corner ribbon (C5). Top-left: the badge below already owns top-right. Clipped by the cover's own
                          ClipToBounds, so only the diagonal band inside the corner shows. -->

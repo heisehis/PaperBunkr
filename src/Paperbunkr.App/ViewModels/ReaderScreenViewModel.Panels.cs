@@ -252,6 +252,7 @@ public partial class ReaderScreenViewModel
                         rightToLeft = rtl,
                         confident = panels.Confident,
                         modelAvailable = PanelDetectionService.OnnxAvailable,
+                        model = new { name = PanelDetectionService.ModelName, sha256 = PanelDetectionService.ModelSha256 },
                         panels = panels.Rects.Select(r => new { r.X, r.Y, r.Width, r.Height }),
                     }, new JsonSerializerOptions { WriteIndented = true });
                     File.WriteAllText(Path.Combine(destination, "detection.json"), json);

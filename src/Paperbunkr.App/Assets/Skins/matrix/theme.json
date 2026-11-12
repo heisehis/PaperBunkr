@@ -1,35 +1,178 @@
 {
+  "schemaVersion": 2,
+  "id": "legacy.matrix",
   "name": "Matrix",
-  "mode": "Dark",
   "category": "matrix",
-  "matrixGlyphs": ["ア", "イ", "ウ", "エ", "オ", "カ", "キ", "ク", "ケ", "コ", "サ", "シ", "ス", "セ", "ソ", "0", "1"],
-  "defaultFontFamily": "Cascadia Code, Consolas, monospace",
-  "colors": {
-    "bg": "#000000",
-    "chrome": "#010401",
-    "border": "#0D2B14",
-    "text": "#33FF66",
-    "textMuted": "#1FAF48",
-    "textFaint": "#146B2C",
-    "accent": "#33FF66",
-    "accentText": "#33FF66",
-    "accentSoft": "#2933FF66",
-    "badge": "#1FAF48",
-    "badgeText": "#000000",
-    "success": "#33FF66",
-    "chartBlue": "#33FF66",
-    "chartViolet": "#1FAF48",
-    "surface0": "#000000",
-    "surface1": "#000000",
-    "surface2": "#010401",
-    "surface3": "#0D2B14",
-    "glow": "#6633FF66",
-    "heroGradientStart": "#00000000",
-    "heroGradientEnd": "#FF000000"
+  "base": {
+    "semantic": {
+      "surface": {
+        "canvas": "#000000",
+        "navigation": "#010401",
+        "recessed": "#000000",
+        "default": "#000000",
+        "raised": "#010401",
+        "overlay": "#0D2B14"
+      },
+      "border": {
+        "default": "#0D2B14"
+      },
+      "text": {
+        "primary": "#33FF66",
+        "secondary": "#1FAF48",
+        "muted": "#146B2C",
+        "accent": "#33FF66"
+      },
+      "action": {
+        "primary": "#33FF66",
+        "soft": "#2933FF66"
+      },
+      "badge": {
+        "background": "#1FAF48",
+        "text": "#000000"
+      },
+      "status": {
+        "success": "#33FF66"
+      },
+      "chart": {
+        "series": {
+          "1": "#33FF66",
+          "2": "#1FAF48"
+        }
+      },
+      "glow": {
+        "color": "#6633FF66"
+      },
+      "hero": {
+        "gradient": {
+          "start": "#00000000",
+          "end": "#FF000000"
+        }
+      }
+    },
+    "metrics": {
+      "spacingUnit": 4,
+      "radius": 7,
+      "radiusSm": 5,
+      "radiusLg": 14
+    },
+    "settings": {
+      "windowBackdrop": "None",
+      "matrixGlyphs": [
+        "ア",
+        "イ",
+        "ウ",
+        "エ",
+        "オ",
+        "カ",
+        "キ",
+        "ク",
+        "ケ",
+        "コ",
+        "サ",
+        "シ",
+        "ス",
+        "セ",
+        "ソ",
+        "0",
+        "1"
+      ]
+    },
+    "typography": {
+      "body": {
+        "family": "Cascadia Code, Consolas, monospace"
+      }
+    }
   },
-  "spacingUnit": 4,
-  "radius": 7,
-  "radiusSm": 5,
-  "radiusLg": 14,
-  "icons": {}
+  "variants": {
+    "dark": {
+      "name": "Dark",
+      "mode": "Dark"
+    },
+    "printout": {
+      "name": "Printout",
+      "mode": "Light",
+      "materials": {
+        "greenbar": {
+          "type": "texture",
+          "source": "textures/greenbar.png",
+          "fallback": "#FFFFFF"
+        },
+        "sprocket": {
+          "type": "texture",
+          "source": "textures/sprocket.png",
+          "fallback": "#F7FAF6"
+        }
+      },
+      "surfaces": {
+        "canvas": "greenbar",
+        "navigation": "sprocket"
+      },
+      "semantic": {
+        "surface": {
+          "canvas": "#FFFFFF",
+          "navigation": "#F7FAF6",
+          "recessed": "#EEF4EC",
+          "default": "#FFFFFF",
+          "raised": "#FFFFFF",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#9DBB98"
+        },
+        "text": {
+          "primary": "#1C2A1C",
+          "secondary": "#3F5A3F",
+          "muted": "#5E755C",
+          "accent": "#1E6B25"
+        },
+        "action": {
+          "primary": "#2E7D32",
+          "soft": "#292E7D32"
+        },
+        "badge": {
+          "background": "#2E7D32",
+          "text": "#FFFFFF"
+        },
+        "status": {
+          "success": "#2E7D32",
+          "danger": "#B3261E",
+          "warning": "#7A5A00",
+          "info": "#1F5FA8"
+        },
+        "chart": {
+          "series": {
+            "1": "#2E7D32",
+            "2": "#1C2A1C"
+          }
+        },
+        "glow": {
+          "color": "#662E7D32"
+        },
+        "hero": {
+          "gradient": {
+            "start": "#00FFFFFF",
+            "end": "#FFFFFFFF"
+          }
+        }
+      },
+      "metrics": {
+        "radius": 0,
+        "radiusSm": 0,
+        "radiusLg": 2
+      },
+      "typography": {
+        "heading": {
+          "family": "Consolas"
+        },
+        "display": {
+          "family": "Consolas"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#FFFFFF"
+        }
+      }
+    }
+  }
 }

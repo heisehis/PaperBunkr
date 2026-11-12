@@ -63,8 +63,7 @@ public class ThemeGoldenResourceTests : IDisposable
 
     public static TheoryData<string> BuiltInKeys => new()
     {
-        "default", "windows_11", "cool_technical", "vibrant_pop", "vintage_paperback",
-        "daylight", "overcast", "maximum_contrast", "colorblind_safe", "matrix",
+        "default", "windows_11", "daylight", "maximum_contrast", "colorblind_safe", "matrix",
     };
 
     [Theory]
@@ -78,9 +77,50 @@ public class ThemeGoldenResourceTests : IDisposable
         AssertMatchesGolden(key, snapshot);
     }
 
+    /// <summary>
+    /// The v2 families as they were before the 2026-11-09 roster work (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md "Testing"): captured
+    /// before any of their files changed, so adding a light/dark half or a component property cannot quietly alter an existing look.
+    /// </summary>
+    public static TheoryData<string> V2Keys => new()
+    {
+        "nordic_frost:dark", "nordic_frost:light", "tokyo_midnight:dark", "tokyo_midnight:oled", "reading_room:paper", "reading_room:lamplight",
+        "canopy:dark", "canopy:light", "crimson_ink", "abyss:dark", "abyss:oled", "sunset_boulevard:dusk", "sunset_boulevard:dawn",
+        "newsprint", "arcade", "graphite:dark", "graphite:oled",
+    };
+
+    /// <summary>The halves and families added by the 2026-11-09 roster, pinned from the day they shipped.</summary>
+    public static TheoryData<string> RosterKeys => new()
+    {
+        "abyss:shallows", "tokyo_midnight:daybreak", "arcade:pastel", "crimson_ink:paper", "matrix:printout", "newsprint:night", "windows_11:dark",
+        "maximum_contrast:light", "colorblind_safe:light", "golden_age:day", "golden_age:midnight", "screentone:paper", "screentone:ink",
+        "risograph:white", "risograph:black", "blueprint:whiteprint", "blueprint:cyanotype", "dune:day", "dune:night", "kraft",
+    };
+
+    [Theory]
+    [MemberData(nameof(RosterKeys))]
+    public void ApplyRosterTheme_WritesTheSameResourcesAsTheSnapshot(string key)
+    {
+        var service = new ThemeService(() => new PaperbunkrDbContext(_dbOptions));
+
+        var snapshot = SnapshotAfter(() => service.ApplyTheme(key));
+
+        AssertMatchesGolden(key.Replace(':', '.'), snapshot);
+    }
+
+    [Theory]
+    [MemberData(nameof(V2Keys))]
+    public void ApplyV2Theme_WritesTheSameResourcesAsTheSnapshot(string key)
+    {
+        var service = new ThemeService(() => new PaperbunkrDbContext(_dbOptions));
+
+        var snapshot = SnapshotAfter(() => service.ApplyTheme(key));
+
+        AssertMatchesGolden(key.Replace(':', '.'), snapshot);
+    }
+
     [Theory]
     [InlineData("default")]
-    [InlineData("cool_technical")]
+    [InlineData("abyss:dark")]
     public void TrueBlack_WritesTheSameResourcesAsTheSnapshot(string key)
     {
         var service = new ThemeService(() => new PaperbunkrDbContext(_dbOptions));
@@ -91,7 +131,7 @@ public class ThemeGoldenResourceTests : IDisposable
             service.SetTrueBlackDark(true);
         });
 
-        AssertMatchesGolden($"{key}.trueblack", snapshot);
+        AssertMatchesGolden($"{key.Replace(':', '.')}.trueblack", snapshot);
     }
 
     [Theory]

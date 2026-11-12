@@ -7,9 +7,13 @@ Seven tabs.
 
 **Themes**
 
-- Pick the active theme from the list. Each theme is either **Light** or **Dark** and sets the
-  colors, corner radius, spacing and icons. Built in: the default look, `windows_11`, **Daylight**,
-  **Overcast**, **Matrix**, **Maximum Contrast** and a **colour-blind-safe** theme.
+- Pick the active theme from the gallery on the left. The switch above it shows the **Dark**, **Light**,
+  **Accessibility** or **Installed** themes; each tile is drawn in that theme's own colours, corners and
+  heading font. The active theme's preview, its variants (for example Dark and Light), its options and
+  Auto switch stay on the right while you browse.
+- Many themes come as a light and dark pair; pick either half under **Variants**, or let **Auto switch**
+  move between them. A theme's OLED look is not a separate tile: turn on **True black**.
+- Accent, corners, text size, fonts and the rest of your own look are under **Appearance > Personalize**.
 - **Install…** adds a `.crpck` theme package (a ZIP of `theme.json` + icons). It's extracted on
   install. Themes change **colors, fonts, corner radius, spacing, and icons** — not window layout
   or control shapes.
@@ -24,7 +28,6 @@ Seven tabs.
   **Switch to dark at** and **Switch to light at** (local hour, 0–23).
 - **Auto-enable true black at** — a local hour (0–23) at which true black turns on by itself;
   leave blank to toggle it manually.
-- **Accent color override** — a hex color such as `#FF8800`; blank uses the theme's own accent.
 
 **Font**
 

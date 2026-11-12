@@ -12,7 +12,8 @@ public sealed record ArcSearchResult(string Id, string Name, string? Deck, strin
 /// </summary>
 public sealed record ArcIssue(
     string Series, string Number, int Year, string? CoverImageUrl, string? Annotation = null, string? Title = null, string? Summary = null,
-    string? ComicVineIssueId = null, string? ComicVineSeriesId = null, string? MetronIssueId = null, string? MetronSeriesId = null)
+    string? ComicVineIssueId = null, string? ComicVineSeriesId = null, string? MetronIssueId = null, string? MetronSeriesId = null,
+    string? StoreDate = null, string? CoverDate = null)
 {
     /// <summary>This entry as the matcher takes it.</summary>
     public ComicReference ToReference(string? sourceKey) => new(
@@ -28,4 +29,5 @@ public sealed record ArcIssue(
 public sealed record ArcEntryList(IReadOnlyList<ArcIssue> Issues, IReadOnlyList<string> SkippedLines, int? ReportedCount = null);
 
 /// <summary>Arc-level (not per-issue) synopsis + cover art, always best-effort - a failed or empty fetch never blocks list creation. <see cref="ComicVineId"/> is Metron's <c>cv_id</c> for the arc (its ArcSerializer carries it), null from every other source.</summary>
-public sealed record ArcOverviewInfo(string? Description, string? CoverImageUrl, string? ComicVineId = null);
+public sealed record ArcOverviewInfo(string? Description, string? CoverImageUrl, string? ComicVineId = null,
+    string? Name = null, string? Deck = null);

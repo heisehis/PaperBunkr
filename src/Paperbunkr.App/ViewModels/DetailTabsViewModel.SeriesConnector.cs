@@ -239,7 +239,7 @@ public partial class DetailTabsViewModel
 
             if (row.Items.Count > 0)
             {
-                rows.Add((row, storyEvent.StartDate));
+                rows.Add((row, Paperbunkr.Data.Metadata.EventEnrichment.EventPublicationDate.Effective(storyEvent, false)?.Lower));
             }
         }
 

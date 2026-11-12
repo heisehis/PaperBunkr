@@ -8,11 +8,24 @@ namespace Paperbunkr.Data.Entities;
 /// <see cref="Location"/>, one creator can hold multiple roles on the same issue, so the join
 /// (<see cref="CreatorCredit"/>) carries a <c>Role</c> discriminator instead of being a plain M:M.
 /// </summary>
-public class Creator
+public class Creator : IHasEntityProfile
 {
     public int Id { get; set; }
 
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>See <see cref="Character.ImageUrl"/>.</summary>
+    public string? ImageUrl { get; set; }
+
+    public EntityImageSource ImageSource { get; set; }
+
+    public DateTime? ImageCheckedAt { get; set; }
+
+    public string? CustomImagePath { get; set; }
+
+    public string? Description { get; set; }
+
+    public string? Aliases { get; set; }
 
     public List<CreatorCredit> Credits { get; set; } = new();
 }

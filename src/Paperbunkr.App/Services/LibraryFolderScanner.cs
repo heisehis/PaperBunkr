@@ -647,6 +647,10 @@ public class LibraryFolderScanner
             }
         }
 
+        // The character / team / location / creator indexes (docs/superpowers/specs/2026-11-10-series-structure-and-discovery-plan.md D1.1):
+        // scans never updated them before, so every page built on them missed newly scanned issues.
+        SyncEntityIndexes(context, addedIssues.Select(i => i.Id));
+
         // Proactive scan alerts (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-scan-
         // alerts-design.md §4) - every real scan/import path (ScanAllAsync, ImportNewFilesAsync,
         // drag import, live folder watch) funnels through this one method, so this is the single
@@ -672,6 +676,31 @@ public class LibraryFolderScanner
     /// a manual edit). Presence-based and safe to re-run, same "fills gaps, one bad file doesn't
     /// stop the batch" contract as <see cref="CoverThumbnailService.GenerateAllAsync"/>.
     /// </summary>
+    /// <summary>Syncs the four entity indexes for each issue; one issue that fails does not stop the rest.</summary>
+    internal static void SyncEntityIndexes(PaperbunkrDbContext context, IEnumerable<int> issueIds)
+    {
+        var ids = issueIds.ToList();
+        try
+        {
+            // One set-based pass (EntityIndexBulk): a scan of thousands of files used to cost four saves and four orphan scans per issue.
+            Paperbunkr.Data.Metadata.EntityIndexSync.SyncIssues(context, ids);
+        }
+        catch (DbUpdateException)
+        {
+            // A conflicting write elsewhere: retry issue by issue so one bad row does not leave the rest unindexed.
+            foreach (int id in ids)
+            {
+                try
+                {
+                    Paperbunkr.Data.Metadata.EntityIndexSync.SyncIssue(context, id);
+                }
+                catch (DbUpdateException)
+                {
+                }
+            }
+        }
+    }
+
     public async Task<LibraryMetadataSyncResult> SyncMetadataAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
     {
         return await Task.Run(() => SyncMetadata(progress, ct), ct);
@@ -742,8 +771,12 @@ public class LibraryFolderScanner
                 }
 
                 lastId = issues[^1].Id;
-                issuesUpdated += context.ChangeTracker.Entries<Issue>().Count(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Modified);
+                var modifiedIds = context.ChangeTracker.Entries<Issue>()
+                    .Where(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Modified)
+                    .Select(e => e.Entity.Id).ToList();
+                issuesUpdated += modifiedIds.Count;
                 context.SaveChanges();
+                SyncEntityIndexes(context, modifiedIds);
                 var identityAfter = ReadingListHealingCoordinator.Capture(context, issues.Select(i => i.Id));
                 identityChangedIds.UnionWith(ReadingListHealingCoordinator.Changed(identityBefore, identityAfter));
             }

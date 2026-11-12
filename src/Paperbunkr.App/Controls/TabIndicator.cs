@@ -27,6 +27,7 @@ public static class TabIndicator
 
     private sealed class HostState
     {
+        public Panel? Root;
         public Border? Bar;
         public Button? Active;
         public (double X, double Width)? Placed;
@@ -74,9 +75,19 @@ public static class TabIndicator
 
     private static void OnClassesChanged(Button button)
     {
-        if (button.Parent is Panel host && button.Classes.Contains("active") && button.IsAttachedToVisualTree())
+        if (button.Parent is not Panel host || !button.IsAttachedToVisualTree())
+        {
+            return;
+        }
+
+        if (button.Classes.Contains("active"))
         {
             Place(host, button, animate: true);
+        }
+        else if (Hosts.TryGetValue(host, out var state) && ReferenceEquals(state.Active, button))
+        {
+            // The active tab lost its class and no other tab has it (yet): no bar under nothing.
+            UpdateShown(host, state);
         }
     }
 
@@ -90,21 +101,50 @@ public static class TabIndicator
 
             // The adorner root itself is positioned by AdornerLayer (it overwrites the root's RenderTransform to track the host), so the
             // bar moves inside a plain container.
-            AdornerLayer.SetAdorner(host, new Panel { IsHitTestVisible = false, Children = { state.Bar } });
+            state.Root = new Panel { IsHitTestVisible = false, Children = { state.Bar } };
+            AdornerLayer.SetAdorner(host, state.Root);
             host.LayoutUpdated += (_, _) => Relayout(host, state);
         }
 
         bool changedTab = !ReferenceEquals(state.Active, active);
         state.Active = active;
-        Move(host, state, animate && changedTab && state.Placed is not null);
+        Move(host, state, animate && changedTab && state.Placed is not null && host.IsEffectivelyVisible);
+        UpdateShown(host, state);
     }
 
-    /// <summary>A resize or relayout (a tab label changing width) snaps the bar to the active tab without animating.</summary>
+    /// <summary>A resize or relayout (a tab label changing width) snaps the bar to the active tab without animating. Hiding or showing the
+    /// strip (or an ancestor) also runs a layout pass, so this is where the bar follows the strip's visibility too.</summary>
     private static void Relayout(Panel host, HostState state)
     {
-        if (state.Active is { } active && active.Parent == host && Measure(host, active) is { } now && now != state.Placed)
+        UpdateShown(host, state);
+        if (state.Root is { IsVisible: true } && state.Active is { } active && active.Parent == host && Measure(host, active) is { } now
+            && now != state.Placed)
         {
             Move(host, state, animate: false);
+        }
+    }
+
+    /// <summary>
+    /// The bar is drawn in the adorner layer, outside the strip's own subtree, and Avalonia removes an adorner only when the adorned control
+    /// is detached - never when it (or an ancestor) is hidden. A closed overlay (OverlayShell collapses through Reveal), a hidden tab panel or
+    /// a hidden active tab is only <c>IsVisible=false</c>, so without this the bar stayed painted where the strip last was, over whatever
+    /// screen was underneath. Shown only while the strip and its active tab are effectively visible and that tab is still active.
+    /// </summary>
+    private static void UpdateShown(Panel host, HostState state)
+    {
+        if (state.Root is not { } root)
+        {
+            return;
+        }
+
+        bool shown = state.Active is { } active
+                     && active.Parent == host
+                     && active.Classes.Contains("active")
+                     && active.IsEffectivelyVisible
+                     && host.IsEffectivelyVisible;
+        if (root.IsVisible != shown)
+        {
+            root.IsVisible = shown;
         }
     }
 

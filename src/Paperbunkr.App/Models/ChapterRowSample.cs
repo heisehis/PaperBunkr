@@ -50,6 +50,8 @@ public sealed class ChapterRowSample
 public sealed class ChapterVolumeGroup
 {
     public required string VolumeLabel { get; init; }
+    public IssueRunGroup? Structure { get; init; }
+    public bool HasStructure => Structure is not null;
     public required System.Collections.Generic.IReadOnlyList<ChapterRowSample> Chapters { get; init; }
 }
 

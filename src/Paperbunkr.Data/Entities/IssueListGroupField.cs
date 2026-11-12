@@ -70,4 +70,6 @@ public enum IssueListGroupField
     OpenCount,
     IsFinalIssue,
     VirtualTag,
+    Writer,
+    MainCharacterOrTeam,
 }

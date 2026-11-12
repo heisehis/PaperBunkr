@@ -8,7 +8,7 @@
     <!-- Single source of truth for the release version (docs/superpowers/specs/
          2026-09-01-auto-update-and-changelog-design.md). CI derives the SemVer release tag/appcast
          version from this by dropping the trailing revision segment and appending "-beta". -->
-    <Version>0.8.2.0</Version>
+    <Version>0.8.4.0</Version>
     <!-- We stamp InformationalVersion ourselves in _PbStampBuildMetadata below; turn off the SDK's
          own SourceLink-driven "+<SourceRevisionId>" append so it can't double-stamp. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -75,7 +75,7 @@
          (docs/superpowers/specs/2026-08-06-reader-canvas-alpha-design.md §1). -->
     <Content Include="x64\7z.dll" CopyToOutputDirectory="PreserveNewest" />
     <!-- Panel detection model for guided view (docs/superpowers/specs/2026-09-28-guided-view-detection-upgrade-design.md step 3):
-         manga-panel-detector-yolo26n exported to ONNX (Apache-2.0, trained on Manga109-s; credited in THIRD-PARTY-NOTICES.md).
+         manga-panel-detector-yolo26n exported to ONNX (AGPL-3.0 since its author relicensed it on 2026-09-24, trained on Manga109-s; credited in THIRD-PARTY-NOTICES.md).
          PanelDetectionService loads it from {baseDir}/Models/ and falls back to the gutter heuristic when it is missing. -->
     <None Include="PanelModel\panel-detector.onnx" CopyToOutputDirectory="PreserveNewest" Link="Models\panel-detector.onnx" />
     <!-- DjVuLibre 3.5.29 command-line tools (GPL 2.0 or later; official 32-bit Windows release,

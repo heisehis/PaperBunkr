@@ -10,6 +10,21 @@ public class AppSettings
 {
     public int Id { get; set; } = 1;
 
+    /// <summary>Whether the event map uses the expanded lane rail.</summary>
+    public bool EventMapLaneRailWide { get; set; }
+
+    /// <summary>Whether the event map inspector is docked beside the map.</summary>
+    public bool EventMapInspectorDocked { get; set; }
+
+    /// <summary>Pack relay maps into waves rather than placing every issue in its own column.</summary>
+    public bool EventMapRelayPacked { get; set; } = true;
+
+    /// <summary>Draw the event map's "read so far" line (docs/superpowers/specs/2026-11-11-continuity-map-polish-design.md §1).</summary>
+    public bool EventMapProgressLine { get; set; } = true;
+
+    /// <summary>Show the issues an event's provider list has that the library doesn't own (docs/superpowers/specs/2026-11-11-continuity-map-completeness-design.md §3).</summary>
+    public bool EventMapShowMissing { get; set; }
+
     /// <summary>
     /// Key of the currently active theme - "default" (the built-in theme) or an installed .crpck's
     /// key. Renamed from <c>ActiveSkinKey</c> (EF <c>RenameColumn</c>, data preserved) by
@@ -560,6 +575,13 @@ public class AppSettings
     public bool RefreshProviderDataOnComplete { get; set; } = true;
 
     /// <summary>
+    /// The version of the derived character/team/location/creator indexes the library was last fully rebuilt at
+    /// (docs/superpowers/specs/2026-11-10-series-structure-and-discovery-plan.md D1.1). Below <c>EntityIndexSync.CurrentVersion</c>, the
+    /// "Rebuild character and creator index" task rebuilds them once. Default 0 = never rebuilt (scans never updated them before this).
+    /// </summary>
+    public int EntityIndexVersion { get; set; }
+
+    /// <summary>
     /// Whether minimizing (and, deliberately diverging from CE - see docs/superpowers/specs/
     /// 2026-08-23-app-chrome-crash-reporter-and-tray-design.md §4) closing the main window hides it
     /// to a tray icon instead of exiting. CE default false (<c>Settings.MinimizeToTray</c>,
@@ -1050,6 +1072,48 @@ public class AppSettings
     /// is finished) - cosmetics-pitch design #2. Deliberate addition, no CE equivalent. Default true.
     /// </summary>
     public bool ProgressRing { get; set; } = true;
+
+    /// <summary>
+    /// Read-progress ring beside a collection's count in the sidebar and in the Home collection card's corner
+    /// (docs/superpowers/specs/2026-11-06-collection-identity-design.md). Deliberately separate from <see cref="ProgressRing"/>, which defaults to
+    /// on and would otherwise turn this on for everyone. Default false.
+    /// </summary>
+    public bool ShowCollectionProgress { get; set; }
+
+    /// <summary>
+    /// Up to three small collection-colour dots (plus "+N") at the bottom-left of Library Poster/Panorama covers, showing which collections a series or issue is in
+    /// (docs/superpowers/specs/2026-11-06-collection-surfaces-design.md). Default false.
+    /// </summary>
+    public bool ShowCollectionBadges { get; set; }
+
+    // --- Personalization (docs/superpowers/specs/2026-11-06-personalization-design.md). Accent and corners reuse AccentOverrideHex and theme-overrides.json. ---
+
+    /// <summary>UI text scale in percent: 90, 100 (default) or 110. Scales the type-scale tokens, not icons or control heights.</summary>
+    public int FontScale { get; set; } = 100;
+
+    /// <summary>Installed font for headings and display text; null = the theme's own. The body font stays <see cref="SelectedFontFamily"/>.</summary>
+    public string? HeadingFontFamily { get; set; }
+
+    /// <summary>Card shadow: 0 Flat, 1 Soft (default, today's look), 2 Lifted.</summary>
+    public int CardElevation { get; set; } = 1;
+
+    /// <summary>How a selected sidebar row is drawn (Standard = accent bar + tint).</summary>
+    public SidebarStyle SidebarStyle { get; set; } = SidebarStyle.Standard;
+
+    /// <summary>Focus-ring thickness: 0 Thin, 1 Normal (default), 2 Thick.</summary>
+    public int FocusRingThickness { get; set; } = 1;
+
+    /// <summary>
+    /// Keeps the Library's collection banner in its slim one-line form even at the top of the list
+    /// (docs/superpowers/specs/2026-11-06-collection-icons-and-slim-banner-design.md); otherwise it is full at the top and slim once scrolled. Default false.
+    /// </summary>
+    public bool CollectionBannerSlim { get; set; }
+
+    /// <summary>Row height of the sidebar's Collections section (Comfortable default).</summary>
+    public CollectionRowDensity CollectionRowDensity { get; set; } = CollectionRowDensity.Comfortable;
+
+    /// <summary>Shape of a collection's sidebar marker when it has no glyph (Circle default).</summary>
+    public CollectionDotShape CollectionDotShape { get; set; } = CollectionDotShape.Circle;
 
     /// <summary>
     /// Accent-glow intensity for the shared <c>PbGlowRing</c> hover/focus ring - cosmetics-pitch

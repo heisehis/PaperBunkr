@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using Avalonia.Media.Imaging;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Paperbunkr.Data;
@@ -20,14 +22,26 @@ public static class StoryEventCoverCache
     public static Bitmap? Get(int eventId)
     {
         var path = StoryEventCoverPaths.GetPath(eventId);
+        try
+        {
+            using var db = PaperbunkrDb.CreateContext();
+            var row = db.StoryEvents.Find(eventId);
+            if (row is not null && row.CoverSource == Paperbunkr.Data.Entities.StoryEventCoverSource.None && string.IsNullOrWhiteSpace(row.CoverImageUrl)) return null;
+            if (row is not null && row.CoverSource != Paperbunkr.Data.Entities.StoryEventCoverSource.Manual && row.CoverImageUrl is { Length: > 0 } url)
+            {
+                string candidate = ProviderPath(url);
+                if (File.Exists(candidate)) path = candidate;
+            }
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.Sqlite.SqliteException or InvalidOperationException) { }
         try { return File.Exists(path) ? new Bitmap(path) : null; }
         catch (Exception ex) when (ex is IOException or NotSupportedException) { return null; }
     }
 
     public static async Task<bool> DownloadAndCacheAsync(int eventId, string url, CancellationToken cancellationToken)
     {
-        string path = StoryEventCoverPaths.GetPath(eventId);
-        string temp = path + ".download";
+        string path = ProviderPath(url);
+        string temp = path + "." + Guid.NewGuid().ToString("N") + ".download";
         try
         {
             var bytes = await Http.GetByteArrayAsync(url, cancellationToken).ConfigureAwait(false);
@@ -41,6 +55,18 @@ public static class StoryEventCoverCache
             try { if (File.Exists(temp)) File.Delete(temp); } catch (IOException) { }
             return false;
         }
+    }
+
+    private static string ProviderPath(string url)
+    {
+        Directory.CreateDirectory(StoryEventCoverPaths.CacheDirectory);
+        return Path.Combine(StoryEventCoverPaths.CacheDirectory, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(url))) + ".jpg");
+    }
+
+    public static Bitmap? GetCandidate(string url)
+    {
+        try { string path = ProviderPath(url); return File.Exists(path) ? new Bitmap(path) : null; }
+        catch (Exception ex) when (ex is IOException or NotSupportedException) { return null; }
     }
 
     public static bool TrySetCustomCover(int eventId, string sourcePath)

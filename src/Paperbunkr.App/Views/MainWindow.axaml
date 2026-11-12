@@ -5,6 +5,7 @@
         xmlns:views="using:Paperbunkr.App.Views"
         xmlns:models="using:Paperbunkr.App.Models"
         xmlns:controls="using:Paperbunkr.App.Controls"
+        xmlns:svc="using:Paperbunkr.App.Services"
         xmlns:conv="using:Avalonia.Data.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -152,7 +153,7 @@
         <Border x:Name="NavRail" Classes="navRail" Classes.expanded="{Binding IsNavRailExpanded}"
                 DockPanel.Dock="Left" Background="{DynamicResource PbChromeBrush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
-                IsVisible="{Binding !IsInReader}"
+                IsVisible="{Binding ShowAppChrome}"
                 ToolTip.ServiceEnabled="{Binding !IsNavRailExpanded}"
                 PointerEntered="RailPointerEntered" PointerExited="RailPointerExited">
             <Grid RowDefinitions="Auto,*,Auto" Margin="0,14,0,10">
@@ -268,6 +269,8 @@
              layout tree instantly either way) - IsHitTestVisible bound the same as before so a
              collapsed, zero-width sidebar can't intercept input or receive focus. -->
         <Border x:Name="ContextualSidebar" Classes="contextualSidebar" Classes.expanded="{Binding ShowContextualSidebar}"
+                Classes.sidebarPill="{Binding IsSidebarPill, Source={x:Static svc:PersonalizationRuntime.Instance}}"
+                Classes.sidebarTint="{Binding IsSidebarTint, Source={x:Static svc:PersonalizationRuntime.Instance}}"
                 DockPanel.Dock="Left" ClipToBounds="True" Background="{DynamicResource PbChromeBrush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
                 IsHitTestVisible="{Binding ShowContextualSidebar}"
@@ -316,6 +319,7 @@
                                         <Binding Path="AccentColor" Converter="{x:Static views:AccentColorToBackgroundTintConverter.Instance}" />
                                     </Setter>
                                 </Style>
+                            <Style Selector=".sidebarPill Border.colRow.active, .sidebarTint Border.colRow.active"><Setter Property="BorderBrush" Value="Transparent" /></Style>
                                 <!-- Hover actions overlay the row's right end (they used to sit in their own two Auto
                                      columns at Opacity 0, still reserving ~60 px, so names trimmed early - 2026-09-26
                                      library audit). Faded out rather than collapsed so Tab still reaches them; a
@@ -324,7 +328,15 @@
                                 <Style Selector="Border.colRow Button.colAction"><Setter Property="Opacity" Value="0" /><Setter Property="IsHitTestVisible" Value="False" /></Style>
                                 <Style Selector="Border.colRow:pointerover Button.colAction"><Setter Property="Opacity" Value="1" /><Setter Property="IsHitTestVisible" Value="True" /></Style>
                                 <Style Selector="Border.colRow Button.colAction:focus-visible"><Setter Property="Opacity" Value="1" /></Style>
-                                <Style Selector="Border.colRow:pointerover TextBlock.colCount"><Setter Property="Opacity" Value="0" /></Style>
+                                <Style Selector="Border.colRow:pointerover StackPanel.colMeta"><Setter Property="Opacity" Value="0" /></Style>
+                                <!-- Grip: hover or keyboard focus only; the drop line while a row is dragged over this one. -->
+                                <Style Selector="Border.colRow Border.colGrip"><Setter Property="Opacity" Value="0" /></Style>
+                                <Style Selector="Border.colRow:pointerover Border.colGrip"><Setter Property="Opacity" Value="1" /></Style>
+                                <Style Selector="Border.colRow.dropTarget"><Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" /></Style>
+                                <!-- Marker shapes: a circle by default, a squircle when Preferences asks. Compact density trims the row's own margin. -->
+                                <Style Selector="Border.colDot"><Setter Property="CornerRadius" Value="{DynamicResource PbRadiusChip}" /></Style>
+                                <Style Selector="Border.colDot.squircle"><Setter Property="CornerRadius" Value="2" /></Style>
+                                <Style Selector="Border.colRow.compact"><Setter Property="Margin" Value="0" /></Style>
                                 <Style Selector="Border.colRow:pointerover TextBlock.colName"><Setter Property="Margin" Value="0,0,56,0" /></Style>
                             </StackPanel.Styles>
 
@@ -359,29 +371,60 @@
                             <ItemsControl x:Name="LibraryCollections" ItemsSource="{Binding Library.Collections}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:CollectionSummary">
-                                        <Border Classes="colRow" Classes.active="{Binding IsActive}" CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="3,0,0,0" Margin="0,1">
-                                            <Grid ColumnDefinitions="Auto,*">
-                                                <Panel Grid.Column="0" Width="14" Height="8" Margin="9,0,0,0" VerticalAlignment="Center">
-                                                    <Ellipse Width="8" Height="8" HorizontalAlignment="Left"
-                                                             Fill="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" />
+                                      <StackPanel>
+                                        <!-- Hairline between the pinned group and the rest (docs/superpowers/specs/2026-11-06-collection-identity-design.md). -->
+                                        <Border Height="1" Margin="8,4" Background="{DynamicResource PbBorderBrush}" IsVisible="{Binding IsFirstUnpinned}" />
+                                        <Border Classes="colRow" Classes.active="{Binding IsActive}" Classes.dropTarget="{Binding IsDropTarget}"
+                                                Classes.compact="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.IsCompactCollections}"
+                                                CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="3,0,0,0" Margin="0,1"
+                                                views:CollectionSidebarRowDrag.Owner="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library}">
+                                            <Grid ColumnDefinitions="Auto,Auto,*">
+                                                <!-- Hover-only grip: the row button swallows a left press, so the drag starts here. -->
+                                                <Border Grid.Column="0" Classes="colGrip" Width="14" Background="Transparent" Cursor="SizeAll"
+                                                        views:CollectionSidebarRowDrag.Handle="True" ToolTip.Tip="Drag to reorder (or use Move up / Move down)"
+                                                        AutomationProperties.Name="{Binding Name, StringFormat='Drag to reorder {0}'}">
+                                                    <fi:SymbolIcon Symbol="ReOrderDotsVertical" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                                   VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                                <Panel Grid.Column="1" Width="22" Height="16" Margin="0,0,0,0" VerticalAlignment="Center">
+                                                    <Border Classes="colDot" Width="8" Height="8" HorizontalAlignment="Left" IsVisible="{Binding ShowDot}"
+                                                            Classes.squircle="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.IsSquircleCollectionDots}"
+                                                            Background="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" />
+                                                    <controls:CollectionGlyphView Value="{Binding IconGlyph}" IconSize="{StaticResource PbIconSizeXs}" HorizontalAlignment="Left"
+                                                                                  VerticalAlignment="Center" IsVisible="{Binding HasGlyph}"
+                                                                                  Accent="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" />
                                                     <fi:SymbolIcon Symbol="Wand" FontSize="{StaticResource PbIconSizeXs}" HorizontalAlignment="Right"
                                                                    Foreground="{DynamicResource PbTextFaintBrush}"
                                                                    IsVisible="{Binding IsSmart}" ToolTip.Tip="Has a rule-based membership slot" />
                                                 </Panel>
-                                                <Button Grid.Column="1" Classes="sideItemButton" HorizontalContentAlignment="Stretch"
+                                                <Button Grid.Column="2" Classes="sideItemButton" HorizontalContentAlignment="Stretch"
                                                         Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.SelectCollectionCommand}"
                                                         CommandParameter="{Binding}">
                                                     <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Stretch">
                                                         <TextBlock Grid.Column="0" Classes="sideItemLabel colName" Text="{Binding Name}" FontSize="13"
                                                                    TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center"
                                                                    Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                        <TextBlock Grid.Column="1" Classes="count colCount" Text="{Binding Count}" Margin="8,0,0,0"
-                                                                   HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                                   Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                        <StackPanel Grid.Column="1" Classes="colMeta" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0"
+                                                                    HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                            <fi:SymbolIcon Symbol="Pin" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                                           VerticalAlignment="Center" IsVisible="{Binding IsPinned}" ToolTip.Tip="Pinned" />
+                                                            <controls:ProgressRing Width="14" Height="14" StrokeThickness="2" VerticalAlignment="Center"
+                                                                                   Value="{Binding ProgressValue}" IsVisible="{Binding HasProgress}"
+                                                                                   ToolTip.Tip="{Binding ProgressText}"
+                                                                                   Foreground="{DynamicResource PbAccentBrush}" TrackBrush="{DynamicResource PbSurface3Brush}" />
+                                                            <TextBlock Classes="count colCount" Text="{Binding Count}" VerticalAlignment="Center"
+                                                                       Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                        </StackPanel>
                                                     </Grid>
                                                 </Button>
-                                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right"
                                                             VerticalAlignment="Center" Margin="0,0,4,0">
+                                                    <Button Classes="iconButton colAction" Margin="0,0,2,0"
+                                                            Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.TogglePinCollectionCommand}"
+                                                            CommandParameter="{Binding}" ToolTip.Tip="Pin or unpin"
+                                                            AutomationProperties.Name="{Binding Name, StringFormat='Pin or unpin {0}'}">
+                                                        <fi:SymbolIcon Symbol="Pin" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                    </Button>
                                                     <Button Classes="ghost colAction" ToolTip.Tip="More"
                                                             AutomationProperties.Name="{Binding Name, StringFormat='More actions for {0}'}">
                                                         <fi:SymbolIcon Symbol="MoreVertical" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" />
@@ -413,6 +456,7 @@
                                                 </StackPanel>
                                             </Grid>
                                         </Border>
+                                      </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -432,6 +476,7 @@
                                 <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
                                 <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
                             </Style>
+                            <Style Selector=".sidebarPill Border.smRow.active, .sidebarTint Border.smRow.active"><Setter Property="BorderBrush" Value="Transparent" /></Style>
                             <Style Selector="Border.smRow Button.smDelete"><Setter Property="Opacity" Value="0" /><Setter Property="IsHitTestVisible" Value="False" /></Style>
                             <Style Selector="Border.smRow:pointerover Button.smDelete"><Setter Property="Opacity" Value="1" /><Setter Property="IsHitTestVisible" Value="True" /></Style>
                         </StackPanel.Styles>
@@ -625,6 +670,7 @@
                                 <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
                                 <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
                             </Style>
+                            <Style Selector=".sidebarPill Border.ecRow.active, .sidebarTint Border.ecRow.active"><Setter Property="BorderBrush" Value="Transparent" /></Style>
                             <Style Selector="Border.ecRow Button.ecDelete"><Setter Property="Opacity" Value="0" /><Setter Property="IsHitTestVisible" Value="False" /></Style>
                             <Style Selector="Border.ecRow:pointerover Button.ecDelete"><Setter Property="Opacity" Value="1" /><Setter Property="IsHitTestVisible" Value="True" /></Style>
                             <Style Selector="Button.segItem">
@@ -779,7 +825,7 @@
         <!-- ============ Status bar (docs/superpowers/specs/2026-09-03-activity-center-design.md) ============ -->
         <!-- Docked before the LastChildFill main-content Grid so it claims the window's bottom edge.
              Hidden on every reading screen (MainViewModel.IsInReader), same as the nav rail above. -->
-        <views:StatusBar DockPanel.Dock="Bottom" IsVisible="{Binding !IsInReader}" />
+        <views:StatusBar DockPanel.Dock="Bottom" IsVisible="{Binding ShowAppChrome}" />
 
         <!-- ============ Main content ============ -->
         <Grid>

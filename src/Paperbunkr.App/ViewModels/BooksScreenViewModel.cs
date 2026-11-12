@@ -861,7 +861,7 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
         // doesn't manage collections (no create/rename/delete UI here, that's the Library sidebar),
         // so unlike LibraryScreenViewModel.Collections there's no DeleteConfirm to wire up.
         Collections.Clear();
-        foreach (var collection in context.Collections.Include(c => c.Items).OrderBy(c => c.SortOrder))
+        foreach (var collection in Paperbunkr.Data.Collections.CollectionOrdering.Apply(context.Collections.Include(c => c.Items)))
         {
             Collections.Add(new CollectionSummary { Id = collection.Id, Name = collection.Name, Count = collection.Items.Count, AccentColor = collection.AccentColor });
         }

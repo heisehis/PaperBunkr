@@ -8,13 +8,15 @@
              xmlns:cs="using:Paperbunkr.App.Services.ContinuityScreen"
              xmlns:eventmap="using:Paperbunkr.App.Services.EventMap"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:epv="using:Paperbunkr.App.Views.EntityPages"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="900"
              x:Class="Paperbunkr.App.Views.ContinuityOverviewView"
              x:Name="Overview"
-             x:DataType="vm:ContinuityPageViewModel">
+             x:DataType="vm:ContinuityPageViewModel"
+             controls:ContextMenuHost.Provider="{Binding}">
 
     <!-- A continuity's Overview (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md, "Continuity page"):
          Add series (when open), Needs attention, Series as runs (Automatic) or a draggable wall (Custom), then Events in order. -->
@@ -23,6 +25,13 @@
     </UserControl.Styles>
 
     <UserControl.Resources>
+        <!-- Key characters / teams: the shared entity tile (docs/superpowers/specs/2026-11-12-entity-pages-redesign-design.md §8). Open on the map
+             moved from a hover button on the art to the tile's context menu (this view model's IContextMenuProvider). -->
+        <DataTemplate x:Key="EntityTileTemplate" x:DataType="cs:OverviewEntity">
+            <epv:EntityTile DataContext="{Binding Tile}" Margin="0,0,8,8"
+                            Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).OpenEntityCommand}"
+                            CommandParameter="{Binding $parent[ContentPresenter].DataContext}" />
+        </DataTemplate>
         <!-- The hover buttons' dark #B0000000 scrim and white glyphs are deliberate: they always sit on arbitrary cover art,
              the same exemption DetailHero documents (and OverlayShell's own scrim uses). -->
         <!-- One poster: a member series (progress ring, name, years; hover: note, remove; the multi-select tick) or a dimmed
@@ -353,6 +362,22 @@
             </StackPanel>
         </StackPanel>
 
+        <StackPanel Spacing="12" IsVisible="{Binding HasKeyCharacters}">
+            <TextBlock Classes="pbTextSection" Text="Key characters" />
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding KeyCharacters}" ItemTemplate="{StaticResource EntityTileTemplate}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
+        <StackPanel Spacing="12" IsVisible="{Binding HasKeyTeams}">
+            <TextBlock Classes="pbTextSection" Text="Key teams" />
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding KeyTeams}" ItemTemplate="{StaticResource EntityTileTemplate}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
         <!-- Events in order -->
         <StackPanel Spacing="4" IsVisible="{Binding HasEvents}">
             <TextBlock Classes="csSection" Text="{Binding EventsHeader}" Margin="0,0,0,6" />

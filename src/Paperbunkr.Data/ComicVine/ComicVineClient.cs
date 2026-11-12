@@ -54,7 +54,7 @@ public interface IComicVineClient
 /// the UI; interactive lookups use <see cref="ComicVineRequestPriority.High"/>.
 /// </para>
 /// </summary>
-public sealed class ComicVineClient : IComicProvider, IIssueFirstSeriesSearch, IPullListSource, Scraping.IStoryArcSource
+public sealed class ComicVineClient : IEntityProfileSource, IComicProvider, IIssueFirstSeriesSearch, IPullListSource, Scraping.IStoryArcSource
 {
     private const string BaseUrl = "https://comicvine.gamespot.com/api";
     private const int PageSize = 100;
@@ -209,6 +209,26 @@ public sealed class ComicVineClient : IComicProvider, IIssueFirstSeriesSearch, I
         }
 
         return volumes;
+    }
+
+    /// <summary>A character, team or person record (docs/superpowers/specs/2026-11-10-series-structure-and-discovery-design.md §3.3). Null when ComicVine has no such record or kind.</summary>
+    public async Task<EntityProfile?> GetEntityProfileAsync(Paperbunkr.Data.Entities.ComicMetadataEntityKind kind, string externalId, CancellationToken cancellationToken)
+    {
+        if (EntityProfileParser.ComicVineResource(kind) is not { } resource || !int.TryParse(externalId, out int id))
+        {
+            return null;
+        }
+
+        try
+        {
+            var root = await GetAsync(Url($"{resource.Resource}/{resource.Prefix}-{id}", "field_list=name,image,deck,aliases"), cancellationToken).ConfigureAwait(false);
+            return EntityProfileParser.FromComicVine(root);
+        }
+        catch (ComicVineException ex) when (ex.ApiStatusCode == 101 ||
+            ex.InnerException is HttpRequestException { StatusCode: System.Net.HttpStatusCode.NotFound })
+        {
+            return null; // "Object Not Found"
+        }
     }
 
     public async Task<ComicVineVolume?> GetVolumeAsync(int volumeId, CancellationToken cancellationToken)

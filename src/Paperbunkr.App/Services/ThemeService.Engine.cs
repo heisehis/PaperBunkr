@@ -63,12 +63,14 @@ public partial class ThemeService
         string activeKey = context.GetOrCreateAppSettings().ActiveThemeKey;
 
         var summaries = new List<ThemeSummary>();
+        var quality = _overrideStore.Load().EffectQuality;
         foreach (var document in _catalog.LoadAll())
         {
             foreach (var variant in document.Variants)
             {
                 var resolved = ThemeResolver.Resolve(document, variant.Id);
-                summaries.Add(SummaryFrom(resolved, IsActiveKey(activeKey, document, variant)));
+                var materials = new ThemeMaterialBuilder(resolved, quality, path => _catalog.OpenAsset(document.Key, path), _materialImages);
+                summaries.Add(SummaryFrom(resolved, IsActiveKey(activeKey, document, variant), materials));
             }
         }
 
@@ -96,11 +98,17 @@ public partial class ThemeService
     }
 
     /// <summary>Preview-card and inspector data for one variant, read from its resolved tokens (no user overrides: the gallery shows the theme as its author made it).</summary>
-    private static ThemeSummary SummaryFrom(ResolvedTheme theme, bool isActive)
+    private static ThemeSummary SummaryFrom(ResolvedTheme theme, bool isActive, ThemeMaterialBuilder materials)
     {
         IBrush Brush(string role) => new SolidColorBrush(theme.Color(role) ?? Colors.Transparent);
         Color bg = theme.Color("surface.canvas") ?? Colors.Black;
         var document = theme.Document;
+
+        // Gallery tile (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md Q4): the theme's own surface materials, corners, button and heading font.
+        IBrush Surface(string surface, string role) =>
+            (theme.Text("surfaces." + surface) is { } material ? materials.Build(material) : null) ?? Brush(role);
+        double radiusSm = theme.Number("metrics.radiusSm") ?? 5;
+        string? headingFamily = theme.Text("typography.heading.family");
 
         return new ThemeSummary
         {
@@ -135,6 +143,12 @@ public partial class ThemeService
             IsLegacy = document.IsLegacy,
             IsBuiltIn = ThemeCatalog.IsBuiltIn(document.Key),
             Warnings = theme.Warnings.Select(w => w.Message).ToList(),
+            CanvasBrush = Surface("canvas", "surface.canvas"),
+            NavigationBrush = Surface("navigation", "surface.navigation"),
+            TileRadius = new CornerRadius(radiusSm),
+            ButtonRadius = ThemeSkinProjector.ComponentValue(theme, "button.primary", "radius", materials) as CornerRadius? ?? new CornerRadius(radiusSm),
+            ButtonForegroundBrush = ThemeSkinProjector.ComponentValue(theme, "button.primary", "foreground", materials) as IBrush ?? Brush("badge.text"),
+            HeadingFontFamily = string.IsNullOrWhiteSpace(headingFamily) ? FontFamily.Default : new FontFamily(headingFamily),
         };
     }
 
@@ -226,14 +240,17 @@ public partial class ThemeService
 
     private static bool AddGlowToPlan(Color glow, ThemeApplyPlan plan)
     {
-        plan.Resources["PbGlowRing"] = BuildGlowRing(glow, _glowTier);
+        plan.Resources["PbGlowRing"] = BuildGlowRing(glow, _glowTier, FocusThicknessFactor);
 
         // A fixed Normal-tier copy for consumers that are not a hover/focus affordance - the reader's bookmark-toggle pulse - so the
         // user's glow tier (even Off) never disables their feedback.
         plan.Resources["PbGlowPulseRing"] = BuildGlowRing(glow, GlowTierNormal);
 
         // Inside twin for controls clipped by their own container (a segmented control's pill), where an outside ring can't show.
-        plan.Resources["PbGlowRingInset"] = BuildGlowRingInset(glow, _glowTier);
+        plan.Resources["PbGlowRingInset"] = BuildGlowRingInset(glow, _glowTier, FocusThicknessFactor);
+
+        // Card shadows follow the card-elevation setting (docs/superpowers/specs/2026-11-06-personalization-design.md); Soft reproduces the old literals.
+        AddCardShadowsToPlan(glow, plan);
         return true;
     }
 
@@ -243,6 +260,7 @@ public partial class ThemeService
     /// </summary>
     private bool Reapply(AppSettings settings, bool suspendTrueBlack = false)
     {
+        LoadPersonalization(settings);
         try
         {
             ApplyResolved(ResolveTheme(settings.ActiveThemeKey, settings, suspendTrueBlack));
@@ -273,6 +291,7 @@ public partial class ThemeService
         using var context = _contextFactory();
         var settings = context.GetOrCreateAppSettings();
 
+        LoadPersonalization(settings);
         var resolved = ResolveTheme(key, settings);
         ApplyResolved(resolved);
 
@@ -298,6 +317,23 @@ public partial class ThemeService
         WindowBackdropRequested?.Invoke(resolved.Text("settings.windowBackdrop") ?? "None");
     }
 
+    private static string? _pendingThemeNotice;
+
+    /// <summary>
+    /// The one-time note from startup's theme-key migration (a retired theme was replaced), or null. Returns it once; the shell raises it in the
+    /// Activity Center as soon as that exists. Process-wide because the shell may build its own <see cref="ThemeService"/>.
+    /// </summary>
+    public static string? TakePendingThemeNotice()
+    {
+        string? notice = _pendingThemeNotice;
+        _pendingThemeNotice = null;
+        return notice;
+    }
+
+    /// <summary>The full key a bare family key stands for (its first variant) when the family now has several variants; null otherwise.</summary>
+    private string? FullKeyOf(string familyKey) =>
+        _catalog.TryFind(familyKey, out var document, out _) && document.HasMultipleVariants ? document.ThemeKeyFor(document.DefaultVariant) : null;
+
     /// <summary>
     /// Re-applies whatever theme/font is already persisted in <see cref="AppSettings"/> - called once on startup. A persisted theme that is
     /// gone or broken falls back to the built-in default (and the default becomes the active theme), so a bad package can never stop the
@@ -307,6 +343,19 @@ public partial class ThemeService
     {
         using var context = _contextFactory();
         var settings = context.GetOrCreateAppSettings();
+
+        // Retired themes and OLED tiles (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md "Migration"), before anything is applied.
+        var migration = ThemeKeyMigration.Apply(settings, FullKeyOf);
+        if (migration.Changed)
+        {
+            context.SaveChanges();
+        }
+
+        if (migration.Notice is not null)
+        {
+            _pendingThemeNotice = migration.Notice;
+        }
+
         _glowTier = NormalizeGlowTier(settings.GlowTier);
         ApplyDensityResources(settings.DensityPreset);
 

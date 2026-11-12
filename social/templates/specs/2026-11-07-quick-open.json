@@ -1,0 +1,15 @@
+{
+  "layout": "clip",
+  "brand": "paperbunkr",
+  "kicker": "PAPERBUNKR TIP",
+  "title": "Jump anywhere with Ctrl+P.",
+  "clip": {
+    "src": "C:/Users/DeeDee/Videos/Paperbunkr Clips/Quick Open.mp4",
+    "start": 4,
+    "duration": 10,
+    "crop": "860:402:116:40",
+    "fps": 12,
+    "width": 960
+  },
+  "out": "social/media/2026-11-07-quick-open"
+}

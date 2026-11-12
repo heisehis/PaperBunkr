@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.risograph",
+  "name": "Risograph",
+  "base": {
+    "metrics": {
+      "radius": 6,
+      "radiusSm": 4,
+      "radiusLg": 12
+    },
+    "typography": {
+      "heading": {
+        "family": "Trebuchet MS"
+      },
+      "display": {
+        "family": "Trebuchet MS"
+      }
+    }
+  },
+  "variants": {
+    "white": {
+      "name": "White Stock",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#F4F1EA",
+        "ink": "#1F2A55",
+        "accent": "#C2186F",
+        "success": "#1C7A5A",
+        "badge": "#006BA8"
+      },
+      "materials": {
+        "grain": {
+          "type": "texture",
+          "source": "textures/light-grain.png",
+          "fallback": "#F4F1EA"
+        }
+      },
+      "surfaces": {
+        "canvas": "grain"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#EFEAE0",
+          "raised": "#F9F7F2",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#D8D1C2"
+        },
+        "status": {
+          "danger": "#C0243A",
+          "warning": "#8A5A00",
+          "info": "#006BA8"
+        },
+        "chart": {
+          "series": {
+            "1": "#C2186F",
+            "2": "#006BA8"
+          }
+        },
+        "glow": {
+          "color": "#66D61F82"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#FFFFFF",
+          "shadow": "2 2 0 0 #006BA8"
+        }
+      }
+    },
+    "black": {
+      "name": "Black Stock",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#1A1A1C",
+        "ink": "#F3EFE6",
+        "accent": "#FF48B0",
+        "success": "#6FD08A",
+        "badge": "#FFE800"
+      },
+      "materials": {
+        "grain": {
+          "type": "texture",
+          "source": "textures/dark-grain.png",
+          "fallback": "#1A1A1C"
+        }
+      },
+      "surfaces": {
+        "canvas": "grain"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#222225",
+          "raised": "#1F1F22",
+          "overlay": "#29292D"
+        },
+        "border": {
+          "default": "#3A3A3F"
+        },
+        "status": {
+          "danger": "#FF5C7A",
+          "warning": "#FFE800",
+          "info": "#4FB8FF"
+        },
+        "chart": {
+          "series": {
+            "1": "#FF48B0",
+            "2": "#FFE800"
+          }
+        },
+        "glow": {
+          "color": "#66FF48B0"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#1A1A1C",
+          "shadow": "2 2 0 0 #FFE800"
+        }
+      }
+    }
+  }
+}

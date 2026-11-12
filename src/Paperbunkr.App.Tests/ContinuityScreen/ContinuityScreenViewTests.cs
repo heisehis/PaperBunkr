@@ -17,6 +17,32 @@ namespace Paperbunkr.App.Tests.ContinuityScreen;
 [Collection(nameof(AvaloniaTestCollection))]
 public class ContinuityScreenViewTests : ContinuityScreenTestBase
 {
+    [Fact]
+    public void MapHeaderEventMenuReusesTheEventCommands()
+    {
+        WithThemeAndTokens(() =>
+        {
+            int issue = SeedIssue("Map menu series", "1", "Regular", 2000);
+            int id = SeedEvent("Map menu event", null, null, issue);
+            var vm = CreateScreen();
+            vm.LoadEvent(id);
+            var header = new MapHeaderStrip { DataContext = vm };
+            var window = new Window { Content = header, Width = 1100, Height = 100 };
+            window.Show(); RunLayout(window);
+            var button = header.GetVisualDescendants().OfType<Button>().Single(b => b.IsEffectivelyVisible && b.Flyout is MenuFlyout);
+            var flyout = (MenuFlyout)button.Flyout!;
+            flyout.ShowAt(button);
+            TestDispatcher.Drain();
+            var items = flyout.Items.OfType<MenuItem>().ToDictionary(i => i.Header?.ToString() ?? string.Empty);
+            Assert.Same(vm.EventPage.ToggleAddIssuesCommand, items["Add issues"].Command);
+            Assert.Same(vm.EventPage.SmartFillCommand, items["Smart fill"].Command);
+            Assert.Same(vm.EventPage.CompareSourcesCommand, items["Compare sources…"].Command);
+            Assert.Same(vm.EventPage.DetectRolesCommand, items["Detect roles"].Command);
+            flyout.Hide();
+            window.Close();
+        });
+    }
+
     private static void RunLayout(Window window)
     {
         window.UpdateLayout();

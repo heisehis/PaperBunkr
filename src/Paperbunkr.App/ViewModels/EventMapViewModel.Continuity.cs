@@ -66,6 +66,7 @@ public sealed partial class EventMapViewModel
     {
         int generation = ++_loadGeneration;
         bool sameScope = IsContinuityScope && ContinuityId == continuityId;
+        if (!sameScope) ResetListState();
         IsLoading = true;
         HasError = false;
 
@@ -149,6 +150,9 @@ public sealed partial class EventMapViewModel
         OnPropertyChanged(nameof(IsAddIssuesVisible));
         OnPropertyChanged(nameof(CornerLabel));
         OnPropertyChanged(nameof(SurfaceAutomationName));
+        OnPropertyChanged(nameof(HideRead));
+        OnPropertyChanged(nameof(HideReadLabel));
+        NotifyMapScopeMode();
     }
 
     private static string ContinuesAsTip(string seriesName, string? continuesAs) =>
@@ -160,28 +164,33 @@ public sealed partial class EventMapViewModel
         var options = new ContinuityMapOptions(
             new HashSet<int>(_hiddenEvents),
             HideOptional: Filter == EventMapFilter.HideOptional,
-            EventsOnly: Filter == EventMapFilter.EventsOnly && data.Events.Count > 0);
-        var source = ContinuityMapBuilder.Build(data, options);
+            EventsOnly: Filter == EventMapFilter.EventsOnly && data.Events.Count > 0,
+            HideRead: HideRead, KeepReadIssueId: _keptReadIssue, HiddenSeriesIds: _hiddenSeriesIds);
+        var source = ContinuityMapBuilder.Build(DataForLayout(data), options);
         _continuitySource = source;
 
-        var layout = EventMapLayout.ComputeBlocks(source, Density);
+        var layout = EventMapLayout.ComputeBlocks(source, Density, IsRelayPacked, !ShortLanesUnfolded);
+        UpdateFoldAvailability(source.Rows, null);
+        OnPropertyChanged(nameof(IsPackingVisible));
         Cards = layout.Cells.Select(c => new EventMapCardViewModel(c, layout.Tracks[c.Track])).ToList();
         LaneHeaders = layout.Tracks.Select(t => new EventMapLaneHeader(
-            t.SeriesName, ContinuesAsTip(t.SeriesName, source.Lanes[t.Index].ContinuesAs), t.Count, t.ColorIndex, false, layout.Metrics.TrackHeight, t.IsOutside,
-            source.Lanes[t.Index].ContinuesAs)).ToList();
+            t.SeriesName, ContinuesAsTip(t.SeriesName + (t.RelationLabel is null ? "" : $" · {t.RelationLabel}"), source.Lanes.FirstOrDefault(l => l.SeriesId == t.SeriesId)?.ContinuesAs), t.Count, t.ColorIndex, false, layout.Metrics.TrackHeight, t.IsOutside,
+            source.Lanes.FirstOrDefault(l => l.SeriesId == t.SeriesId)?.ContinuesAs, t.RelationLabel)).ToList();
         Connectors = source.Connectors;
         Layout = layout;
+        RefreshMatrixAndRollCall();
 
         int? index = keepIssueId is int issue ? layout.IndexOfIssue(issue) : null;
         if (index is null && firstView)
         {
-            index = layout.FirstUnread();
+            index = HideRead && layout.Cells.Count > 0 ? 0 : layout.FirstUnread();
         }
 
         SelectedIndex = null;
         Select(index, reveal: index is not null);
         UpdateStatusText();
         OnPropertyChanged(nameof(IsFilteredEmpty));
+        OnPropertyChanged(nameof(IsEverythingRead));
         OnPropertyChanged(nameof(HasPendingDuplicates));
         OnPropertyChanged(nameof(PendingDuplicatesText));
         OnPropertyChanged(nameof(CanFilterEventsOnly));

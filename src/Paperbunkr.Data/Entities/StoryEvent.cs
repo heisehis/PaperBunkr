@@ -39,6 +39,11 @@ public class StoryEvent
     /// <summary>Metron's arc resource id, same posture as <see cref="ComicVineArcId"/>.</summary>
     public string? MetronArcId { get; set; }
 
+    public int? GcdArcId { get; set; }
+    public List<EventMetadataState> MetadataStates { get; set; } = new();
+    public List<EventDateEndpoint> DateEndpoints { get; set; } = new();
+    public List<EventMetadataChange> MetadataChanges { get; set; } = new();
+
     /// <summary>
     /// The series the Event Map draws as its trunk lane (docs/superpowers/specs/2026-09-25-event-map-design.md §1).
     /// Null = pick automatically (a member series whose name matches the event's); 0 = never use a spine (relay

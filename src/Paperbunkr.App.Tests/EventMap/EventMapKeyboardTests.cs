@@ -17,7 +17,41 @@ namespace Paperbunkr.App.Tests.EventMap;
 [Collection(nameof(AvaloniaTestCollection))]
 public class EventMapKeyboardTests
 {
-    private sealed record Rig(Window Window, EventMapView View, EventMapViewModel Vm, EventMapSurface Surface, ScrollViewer Scroller, List<Key> Unhandled);
+    [Fact]
+    public void MatrixKeepsSelectionAndEscapeClosesExpansionBeforeInspector()
+    {
+        Build(issues: 30, series: 3, rig =>
+        {
+            rig.Vm.Select(0);
+            rig.Vm.ShowMatrixModeCommand.Execute(null);
+            RunLayout(rig.Window);
+            var matrix = rig.View.FindControl<EventMatrixCanvas>("MatrixCanvas")!;
+            matrix.Focus();
+            Press(rig.Window, Key.Enter);
+            Assert.True(matrix.HasExpansion);
+            rig.Vm.OpenInspectorCommand.Execute(null);
+            Press(rig.Window, Key.Escape);
+            Assert.False(matrix.HasExpansion);
+            Assert.True(rig.Vm.IsInspectorOpen);
+            Assert.Equal(0, rig.Vm.SelectedIndex);
+        });
+    }
+
+    [Fact]
+    public void RollCallHidesAndRestoresSeriesInBothViews()
+    {
+        Build(issues: 30, series: 3, rig =>
+        {
+            var row = rig.Vm.RollCallRows[0];
+            row.IsShown = false;
+            TestDispatcher.Drain();
+            Assert.DoesNotContain(rig.Vm.Layout.Cells, c => c.Row.SeriesId == row.SeriesId);
+            Assert.DoesNotContain(rig.Vm.Matrix.Rows, r => r.SeriesId == row.SeriesId);
+            rig.Vm.ShowAllSeriesCommand.Execute(null);
+            Assert.Contains(rig.Vm.Matrix.Rows, r => r.SeriesId == row.SeriesId);
+        });
+    }
+    private sealed record Rig(Window Window, EventMapView View, EventMapViewModel Vm, EventMapCanvas Canvas, IInputService Input, List<Key> Unhandled);
 
     private static Rig Build(int issues, int series, Action<Rig> body)
     {
@@ -39,6 +73,7 @@ public class EventMapKeyboardTests
 
             var view = new EventMapView { DataContext = vm };
             var input = ReaderTestInput.Create();
+            view.InputService = input;
             var window = new Window { Content = view, Width = 900, Height = 420 };
             InputHost.Attach(window, input);
             var unhandled = new List<Key>();
@@ -47,7 +82,7 @@ public class EventMapKeyboardTests
             window.Show();
             RunLayout(window);
             RunLayout(window);
-            rig = new Rig(window, view, vm, view.FindControl<EventMapSurface>("Surface")!, view.FindControl<ScrollViewer>("Scroller")!, unhandled);
+            rig = new Rig(window, view, vm, view.FindControl<EventMapCanvas>("MapCanvas")!, input, unhandled);
             body(rig);
             window.Close();
         });
@@ -57,12 +92,25 @@ public class EventMapKeyboardTests
     private static string Where(Rig rig)
     {
         var focused = rig.Window.FocusManager!.GetFocusedElement();
-        string card = focused is EventMapCard c ? $"card {c.CellIndex}" : focused is Control other ? other.GetType().Name : "nothing";
-        return $"selected {rig.Vm.SelectedIndex}, focus on {card}, offset {rig.Scroller.Offset}";
+        string card = focused is Control other ? other.GetType().Name : "nothing";
+        return $"selected {rig.Vm.SelectedIndex}, focus on {card}, offset {rig.Canvas.Offset}";
     }
 
     private static bool FocusOnSelected(Rig rig) =>
-        rig.Window.FocusManager!.GetFocusedElement() is EventMapCard card && card.CellIndex == rig.Vm.SelectedIndex;
+        ReferenceEquals(rig.Window.FocusManager!.GetFocusedElement(), rig.Canvas);
+
+    [Fact]
+    public void RemappedZoomActionIsHandledThroughTheInputService()
+    {
+        Build(issues: 60, series: 8, rig =>
+        {
+            rig.Input.SetBindings(InputActionIds.ContinuityMapZoomIn, new[] { InputBinding.ForKey(Key.F8) });
+            rig.Canvas.Focus(NavigationMethod.Directional);
+            double before = rig.Vm.Scale;
+            Press(rig.Window, Key.F8);
+            Assert.True(rig.Vm.Scale > before);
+        });
+    }
 
     [Fact]
     public void RightArrow_KeepsFocusOnTheSelectedCard_AsTheMapScrolls()
@@ -71,7 +119,7 @@ public class EventMapKeyboardTests
         {
             rig.Vm.Select(0, reveal: false);
             RunLayout(rig.Window);
-            rig.Surface.CardAt(0)!.Focus(NavigationMethod.Directional);
+            rig.Canvas.Focus(NavigationMethod.Directional);
             RunLayout(rig.Window);
             Assert.True(FocusOnSelected(rig), "start: " + Where(rig));
 
@@ -94,7 +142,7 @@ public class EventMapKeyboardTests
         {
             rig.Vm.Select(0, reveal: false);
             RunLayout(rig.Window);
-            rig.Surface.CardAt(0)!.Focus(NavigationMethod.Directional);
+            rig.Canvas.Focus(NavigationMethod.Directional);
             RunLayout(rig.Window);
 
             for (int i = 0; i < 6; i++)
@@ -124,7 +172,7 @@ public class EventMapKeyboardTests
         {
             rig.Vm.Select(0, reveal: false);
             RunLayout(rig.Window);
-            rig.Surface.CardAt(0)!.Focus(NavigationMethod.Directional);
+            rig.Canvas.Focus(NavigationMethod.Directional);
             RunLayout(rig.Window);
             rig.Unhandled.Clear();
 
@@ -136,20 +184,14 @@ public class EventMapKeyboardTests
     }
 
     [Fact]
-    public void ASelectedCardThatHasKeyboardFocus_ShowsOnlyTheGlowRing_NotAnAccentBorderUnderIt()
+    public void MapCanvasIsTheSingleFocusableMapElement()
     {
         Build(issues: 24, series: 6, rig =>
         {
             rig.Vm.Select(0, reveal: false);
-            RunLayout(rig.Window);
-            rig.Surface.CardAt(0)!.Focus(NavigationMethod.Directional);
-            RunLayout(rig.Window);
-            var card = rig.Surface.CardAt(0)!;
-            var frame = card.GetVisualDescendants().OfType<Border>().First(b => b.Name == "PART_Frame");
-
-            Assert.True(card.IsFocused && card.Classes.Contains(":focus-visible"), "the card has keyboard focus");
-            Assert.True(rig.View.TryFindResource("PbBorderBrush", rig.Window.ActualThemeVariant, out var resting));
-            Assert.Same(resting, frame.BorderBrush);
+            rig.Canvas.Focus(NavigationMethod.Directional);
+            Assert.True(rig.Canvas.IsFocused);
+            Assert.Null(rig.Canvas.FocusAdorner);
         });
     }
 }

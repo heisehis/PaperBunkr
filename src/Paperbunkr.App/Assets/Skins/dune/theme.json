@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.dune",
+  "name": "Dune",
+  "base": {
+    "metrics": {
+      "radius": 8,
+      "radiusSm": 6,
+      "radiusLg": 14
+    },
+    "typography": {
+      "heading": {
+        "family": "Palatino Linotype"
+      },
+      "display": {
+        "family": "Palatino Linotype"
+      }
+    }
+  },
+  "variants": {
+    "day": {
+      "name": "Day",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#FBF1E1",
+        "ink": "#3B2414",
+        "accent": "#B04E25",
+        "success": "#2F6F73",
+        "badge": "#D9A441"
+      },
+      "materials": {
+        "dunes": {
+          "type": "image",
+          "source": "textures/day.png",
+          "fallback": "#F7EAD3",
+          "stretch": "uniformToFill"
+        }
+      },
+      "surfaces": {
+        "canvas": "dunes"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#F8ECD6",
+          "raised": "#FCF5E9",
+          "overlay": "#FFFAF2"
+        },
+        "border": {
+          "default": "#E0C79F"
+        },
+        "badge": {
+          "text": "#3B2414"
+        },
+        "status": {
+          "danger": "#B3261E",
+          "warning": "#8A5A00",
+          "info": "#2F6F73"
+        },
+        "chart": {
+          "series": {
+            "1": "#2F6F73",
+            "2": "#B04E25"
+          }
+        },
+        "glow": {
+          "color": "#66B04E25"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#FFF7EA"
+        }
+      }
+    },
+    "night": {
+      "name": "Night",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#1B1A30",
+        "ink": "#F3E3C7",
+        "accent": "#E0A458",
+        "success": "#8FC9A0",
+        "badge": "#D2693C"
+      },
+      "materials": {
+        "dunes": {
+          "type": "image",
+          "source": "textures/night.png",
+          "fallback": "#221B2C",
+          "stretch": "uniformToFill"
+        }
+      },
+      "surfaces": {
+        "canvas": "dunes"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#1F1C30",
+          "raised": "#252036",
+          "overlay": "#2E2840"
+        },
+        "border": {
+          "default": "#3E3044"
+        },
+        "badge": {
+          "text": "#2A1608"
+        },
+        "status": {
+          "danger": "#F08A70",
+          "warning": "#E0A458",
+          "info": "#9FB8E8"
+        },
+        "chart": {
+          "series": {
+            "1": "#E0A458",
+            "2": "#D2693C"
+          }
+        },
+        "glow": {
+          "color": "#66E0A458"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#2A1608"
+        }
+      }
+    }
+  }
+}

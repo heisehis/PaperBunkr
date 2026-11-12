@@ -52,6 +52,12 @@ public static class ThemeSkinProjector
             // The Color resource stays the plain colour (custom-drawn controls and gradients need one); only the Brush becomes the material.
             plan.Resources[$"Pb{resourceKey}Brush"] = brush;
         }
+
+        // A selected row may be a material too (design Q14: Screentone's halftone selection). The Color resource stays the plain selection colour.
+        if (theme.Text("surfaces.selection") is { } selectionMaterial && materials.Build(selectionMaterial) is { } selectionBrush)
+        {
+            plan.Resources["PbSelectionBrush"] = selectionBrush;
+        }
     }
 
     // ===================== Component skins =====================
@@ -63,7 +69,7 @@ public static class ThemeSkinProjector
             foreach (var property in role.Properties)
             {
                 var authored = theme.Token(ThemeTokenPaths.Component(role.Role, "normal", property.Name));
-                object? normal = Convert(property.Kind, authored?.Value, materials) ?? Default(theme, property);
+                object? normal = Limit(property, Convert(property.Kind, authored?.Value, materials) ?? Default(theme, property));
                 string key = ThemeComponentRegistry.ResourceKey(role, property);
                 if (normal is not null)
                 {
@@ -135,8 +141,43 @@ public static class ThemeSkinProjector
         };
     }
 
+    /// <summary>
+    /// One component property as the live apply would produce it (authored normal value, else its default) - for previews that draw a theme
+    /// other than the active one, such as the gallery tiles. Null when the role or property is unknown.
+    /// </summary>
+    public static object? ComponentValue(ResolvedTheme theme, string role, string propertyName, ThemeMaterialBuilder? materials)
+    {
+        var componentRole = ThemeComponentRegistry.Roles.FirstOrDefault(r => string.Equals(r.Role, role, StringComparison.Ordinal));
+        var property = componentRole?.Properties.FirstOrDefault(p => string.Equals(p.Name, propertyName, StringComparison.Ordinal));
+        if (componentRole is null || property is null)
+        {
+            return null;
+        }
+
+        var authored = theme.Token(ThemeTokenPaths.Component(componentRole.Role, "normal", property.Name));
+        return Limit(property, Convert(property.Kind, authored?.Value, materials) ?? Default(theme, property));
+    }
+
+    /// <summary>Caps a component's border at <see cref="ThemeComponentRegistry.MaxBorderThickness"/> per side; every other value passes through.</summary>
+    private static object? Limit(ThemeComponentProperty property, object? value)
+    {
+        if (value is Thickness t && string.Equals(property.Name, "borderThickness", StringComparison.Ordinal))
+        {
+            double max = ThemeComponentRegistry.MaxBorderThickness;
+            return new Thickness(Math.Min(t.Left, max), Math.Min(t.Top, max), Math.Min(t.Right, max), Math.Min(t.Bottom, max));
+        }
+
+        return value;
+    }
+
     private static object? Default(ResolvedTheme theme, ThemeComponentProperty property)
     {
+        if (property.Kind == ThemeComponentValueKind.Shadow)
+        {
+            // Always written, so a theme without a shadow clears the one the previous theme set.
+            return new BoxShadows();
+        }
+
         if (property.DefaultToken is not null && theme.Token(property.DefaultToken) is { } token)
         {
             return Convert(property.Kind, token.Value, null);
@@ -175,6 +216,21 @@ public static class ThemeSkinProjector
 
             case ThemeComponentValueKind.Number:
                 return v.Kind == ThemeValueKind.Number ? v.Number : null;
+
+            case ThemeComponentValueKind.Shadow:
+                if (v.Kind != ThemeValueKind.Text || string.IsNullOrWhiteSpace(v.Text))
+                {
+                    return null;
+                }
+
+                try
+                {
+                    return BoxShadows.Parse(v.Text);
+                }
+                catch (FormatException)
+                {
+                    return null;
+                }
 
             default:
                 return null;
